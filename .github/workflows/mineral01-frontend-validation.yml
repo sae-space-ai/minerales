@@ -1,0 +1,23 @@
+name: MINERAL-01 — TypeScript & build
+on:
+  push:
+    branches:
+      - audit/mineral01-ui-evidence-20261011
+  pull_request:
+    branches:
+      - mineral-01-geospatial-mission-95a57
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

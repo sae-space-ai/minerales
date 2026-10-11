@@ -84,8 +84,8 @@ export interface GeomorphologicalEval {
 }
 
 export interface PatternResult {
-  detected: number;
-  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  detected: number | null; // null: no evaluado; no convertir en cero
+  confidence: 'NOT_EVALUATED' | 'LOW' | 'MEDIUM' | 'HIGH';
   description: string;
   caveat: string;
 }

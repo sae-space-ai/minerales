@@ -11,6 +11,7 @@ import {
   Globe,
   Clock,
   Ruler,
+  Zap,
 } from 'lucide-react';
 import { MissionProvider } from './components/MissionProvider';
 import Dashboard from './components/Dashboard';
@@ -22,13 +23,14 @@ import DocumentationPanel from './components/DocumentationPanel';
 import AIPanel from './components/AIPanel';
 import TimelinePanel from './components/TimelinePanel';
 import MeasurementsPanel from './components/MeasurementsPanel';
+import JoulePanel from './components/JoulePanel';
 import { lazy, Suspense } from 'react';
 import { useMission } from './lib/store';
 
 // Carga diferida del globo 3D (CesiumJS es pesado)
 const Globe3D = lazy(() => import('./components/Globe3D'));
 
-type Tab = 'dashboard' | 'map' | 'globe' | 'anomalies' | 'ai' | 'timeline' | 'measurements' | 'matrix' | 'export' | 'docs';
+type Tab = 'dashboard' | 'map' | 'globe' | 'anomalies' | 'ai' | 'timeline' | 'measurements' | 'joule' | 'matrix' | 'export' | 'docs';
 
 function AppContent() {
   const { state } = useMission();
@@ -48,6 +50,7 @@ function AppContent() {
     { id: 'ai', label: 'MINERAL-AI', icon: <Bot className="w-4 h-4" /> },
     { id: 'timeline', label: 'Timeline', icon: <Clock className="w-4 h-4" /> },
     { id: 'measurements', label: 'Mediciones', icon: <Ruler className="w-4 h-4" /> },
+    { id: 'joule', label: 'JOULE', icon: <Zap className="w-4 h-4" /> },
     { id: 'matrix', label: 'Integración', icon: <GitBranch className="w-4 h-4" /> },
     { id: 'export', label: 'Exportar', icon: <Download className="w-4 h-4" /> },
     { id: 'docs', label: 'Docs', icon: <FileText className="w-4 h-4" /> },
@@ -153,6 +156,7 @@ function AppContent() {
         {activeTab === 'ai' && <AIPanel />}
         {activeTab === 'timeline' && <TimelinePanel />}
         {activeTab === 'measurements' && <MeasurementsPanel />}
+        {activeTab === 'joule' && <JoulePanel />}
         {activeTab === 'matrix' && <IntegrationMatrixView />}
         {activeTab === 'export' && <ExportPanel />}
         {activeTab === 'docs' && <DocumentationPanel />}

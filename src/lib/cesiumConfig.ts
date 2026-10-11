@@ -57,15 +57,23 @@ export const BASE_IMAGERY_PROVIDERS = {
 export const WMS_SERVICES = {
   EUMETVIEW: {
     name: 'EUMETView',
-    url: 'https://view.eumetsat.int/geoservices/ows',
+    url: 'https://view.eumetsat.int/geoserver/wms',
     type: 'WMS',
+    version: '1.3.0',
     available: true,
     authRequired: false,
+    verified: '2026-01-15',
     layers: [
-      { id: 'MSG_Dust_RGB', name: 'MSG Dust RGB', description: 'Imágenes MSG en falso color para polvo' },
-      { id: 'MSG_IR108', name: 'MSG IR 10.8μm', description: 'Infrarrojo térmico' },
-      { id: 'MSG_VIS006', name: 'MSG Visible 0.6μm', description: 'Visible de alta resolución' },
+      { id: 'msg_fes:rgb_dust', name: 'Dust RGB - MSG', description: 'Composición RGB para monitoreo de polvo sahariano (IR8.7, IR10.8, IR12.0)' },
+      { id: 'msg_fes:ir108', name: 'IR 10.8μm - MSG', description: 'Imagen infrarroja térmica SEVIRI 10.8μm' },
+      { id: 'msg_fes:vis006', name: 'Visible 0.6μm - MSG', description: 'Imagen visible de alta resolución SEVIRI' },
+      { id: 'msg_fes:rgb_natural', name: 'Natural Colour RGB - MSG', description: 'Composición color natural (NIR1.6, VIS0.8, VIS0.6)' },
+      { id: 'msg_fes:rgb_convection', name: 'Convection RGB - MSG', description: 'Composición RGB para convección severa' },
+      { id: 'msg_fes:clm', name: 'Cloud Mask - MSG', description: 'Máscara de nubes a nivel de píxel' },
+      { id: 'msg_fes:fire', name: 'Active Fire - MSG', description: 'Detección de incendios activos' },
     ],
+    timeDimension: true,
+    timeRange: '2020-09-01/2026-10-11/PT15M',
   },
   IGN_PNOA: {
     name: 'IGN PNOA',

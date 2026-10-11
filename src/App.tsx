@@ -8,16 +8,19 @@ import {
   FileText,
   Layers,
 } from 'lucide-react';
+import { MissionProvider } from './components/MissionProvider';
 import Dashboard from './components/Dashboard';
 import MapView from './components/MapView';
 import AnomalyPanel from './components/AnomalyPanel';
 import IntegrationMatrixView from './components/IntegrationMatrixView';
 import ExportPanel from './components/ExportPanel';
 import DocumentationPanel from './components/DocumentationPanel';
+import { useMission } from './lib/store';
 
 type Tab = 'dashboard' | 'map' | 'anomalies' | 'matrix' | 'export' | 'docs';
 
-function App() {
+function AppContent() {
+  const { state } = useMission();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [activeLayers, setActiveLayers] = useState({
     anomalies: true,
@@ -45,7 +48,7 @@ function App() {
               <span className="text-2xl">⛏️</span>
               <div>
                 <h1 className="text-lg font-bold text-white leading-tight">MINERAL-01</h1>
-                <p className="text-xs text-gray-500">FireCycle AI × GEOOBS-AI</p>
+                <p className="text-xs text-gray-500">FireCycle AI × GEOOBS-AI — Fase 2</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -67,9 +70,19 @@ function App() {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-950/30 border border-red-800/40 rounded-lg">
-                <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                <span className="text-xs text-red-300 font-mono">BLOCKED_RUNTIME</span>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+                state.mode === 'REAL'
+                  ? 'bg-green-950/30 border-green-800/40'
+                  : 'bg-amber-950/30 border-amber-800/40'
+              }`}>
+                <div className={`w-2 h-2 rounded-full animate-pulse ${
+                  state.mode === 'REAL' ? 'bg-green-400' : 'bg-amber-400'
+                }`}></div>
+                <span className={`text-xs font-mono ${
+                  state.mode === 'REAL' ? 'text-green-300' : 'text-amber-300'
+                }`}>
+                  {state.mode === 'REAL' ? 'REAL' : 'DEMO'}
+                </span>
               </div>
             </div>
           </div>
@@ -131,6 +144,14 @@ function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <MissionProvider>
+      <AppContent />
+    </MissionProvider>
   );
 }
 

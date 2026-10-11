@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, ReactNode } from 'react';
+import { useState, useCallback, useRef, ReactNode, useEffect } from 'react';
 import {
   MissionContext,
   MissionState,
@@ -10,6 +10,7 @@ import { readLASHeader, computeSHA256, computePointDensity } from '../lib/lasRea
 import { decompressLAZ } from '../lib/lazProcessor';
 import { loadMDTFromFile, MDTData } from '../lib/mdtProcessor';
 import { queryIGME, queryIGMEViaProxy } from '../lib/igmeClient';
+import { saveMDTToCache, loadMDTFromCache, validateMDTIntegrity } from '../lib/mdtPersistence';
 
 interface MissionProviderProps {
   children: ReactNode;
@@ -26,6 +27,42 @@ export function MissionProvider({ children }: MissionProviderProps) {
 
   // Referencia estable para el MDT completo (no se guarda en estado React para evitar re-renders)
   const mdtDataRef = useRef<MDTData | null>(null);
+
+  // Restaurar MDT de IndexedDB al iniciar (si existe y está autorizado)
+  useEffect(() => {
+    const restoreMDT = async () => {
+      try {
+        // Intentar cargar el último MDT cacheado
+        // Por ahora usamos una clave fija, en el futuro podríamos listar y seleccionar
+        const cachedMDT = await loadMDTFromCache('latest');
+        
+        if (cachedMDT && validateMDTIntegrity(cachedMDT)) {
+          mdtDataRef.current = cachedMDT;
+          setState((prev) => ({
+            ...prev,
+            mdt: {
+              filename: cachedMDT.source,
+              width: cachedMDT.width,
+              height: cachedMDT.height,
+              resolution: cachedMDT.resolution,
+              bounds: cachedMDT.bounds,
+              crs: cachedMDT.crs,
+              noDataValue: cachedMDT.noDataValue,
+              status: 'COMPLETED',
+              dataClassification: 'SOURCE_VERIFIED',
+              timestamp: cachedMDT.timestamp,
+              errorMessage: null,
+            },
+          }));
+          console.log('✅ MDT restaurado desde IndexedDB:', cachedMDT.source);
+        }
+      } catch (error) {
+        console.warn('No se pudo restaurar MDT desde IndexedDB:', error);
+      }
+    };
+
+    restoreMDT();
+  }, []);
 
   const setMode = useCallback((mode: 'DEMO' | 'REAL') => {
     setState((prev) => {
@@ -342,6 +379,16 @@ export function MissionProvider({ children }: MissionProviderProps) {
       
       // Guardar MDT completo en ref estable (no en estado React)
       mdtDataRef.current = mdt;
+      
+      // Guardar en IndexedDB para persistencia entre sesiones
+      try {
+        const checksum = await computeSHA256(await file.arrayBuffer());
+        await saveMDTToCache(mdt, file.name, checksum, file.size, true);
+        console.log('✅ MDT guardado en IndexedDB:', file.name);
+      } catch (error) {
+        console.warn('No se pudo guardar MDT en IndexedDB:', error);
+        // No es crítico, continuamos sin persistencia
+      }
       
       setState((prev) => ({
         ...prev,

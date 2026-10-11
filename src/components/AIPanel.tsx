@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMission } from '../lib/store';
 import { parseCommand, executeCommand, formatResult, AIExecutionResult } from '../lib/mineralAI';
-import { Bot, Send, AlertTriangle } from 'lucide-react';
+import { Bot, Send, AlertTriangle, Upload, Info } from 'lucide-react';
+import { getDiagnosticInfo, formatDiagnosticInfo } from '../lib/diagnostics';
 
 interface ChatMessage {
   id: string;
@@ -12,7 +13,7 @@ interface ChatMessage {
 }
 
 export default function AIPanel() {
-  const { state, getLoadedMDT } = useMission();
+  const { state, getLoadedMDT, loadMDT } = useMission();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -22,7 +23,9 @@ export default function AIPanel() {
     },
   ]);
   const [input, setInput] = useState('');
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,7 +57,7 @@ export default function AIPanel() {
         tool: 'none',
         input: parsed.parameters,
         output: null,
-        errors: ['No hay MDT cargado. Por favor, importe un archivo GeoTIFF desde el Dashboard antes de ejecutar análisis geomorfológicos.'],
+        errors: ['No hay MDT cargado. Por favor, importe un archivo GeoTIFF antes de ejecutar análisis geomorfológicos.'],
         timestamp: new Date().toISOString(),
         duration: 0,
       };
@@ -64,7 +67,7 @@ export default function AIPanel() {
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: response,
+        content: `${response}\n\n💡 **Acción requerida:** Importe un archivo GeoTIFF usando el botón de abajo o desde el Dashboard.`,
         timestamp: new Date().toISOString(),
         execution,
       };
@@ -95,6 +98,69 @@ export default function AIPanel() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleImportMDT = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Añadir mensaje de progreso
+    const progressMessage: ChatMessage = {
+      id: `progress-${Date.now()}`,
+      role: 'assistant',
+      content: `📥 Importando MDT: ${file.name}\n\nProcesando archivo GeoTIFF...`,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, progressMessage]);
+
+    try {
+      await loadMDT(file);
+      
+      // Verificar si se cargó correctamente
+      const mdt = getLoadedMDT();
+      if (mdt) {
+        const successMessage: ChatMessage = {
+          id: `success-${Date.now()}`,
+          role: 'assistant',
+          content: `✅ MDT importado correctamente:\n\n• Archivo: ${file.name}\n• Dimensiones: ${mdt.width} × ${mdt.height}\n• Resolución: ${mdt.resolution.toFixed(2)} m/píxel\n• CRS: ${mdt.crs}\n• NoData: ${mdt.noDataValue}\n\nYa puede ejecutar análisis geomorfológicos.`,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev.filter(m => m.id !== progressMessage.id), successMessage]);
+      } else {
+        throw new Error('El MDT no se cargó correctamente');
+      }
+    } catch (error) {
+      const errorMessage: ChatMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: `❌ Error al importar MDT: ${error instanceof Error ? error.message : 'Error desconocido'}\n\nVerifique que el archivo es un GeoTIFF válido.`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev.filter(m => m.id !== progressMessage.id), errorMessage]);
+    }
+
+    // Limpiar input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleShowDiagnostic = () => {
+    const diag = getDiagnosticInfo();
+    diag.state.mdtLoaded = state.mdt.status === 'COMPLETED';
+    diag.state.mdtStatus = state.mdt.status;
+    diag.state.lasLoaded = state.lasFile.status === 'COMPLETED';
+    diag.state.lasStatus = state.lasFile.status;
+    diag.state.mode = state.mode;
+
+    const diagnosticMessage: ChatMessage = {
+      id: `diagnostic-${Date.now()}`,
+      role: 'assistant',
+      content: formatDiagnosticInfo(diag),
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, diagnosticMessage]);
+    setShowDiagnostic(false);
   };
 
   const examples = [
@@ -161,17 +227,44 @@ export default function AIPanel() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Examples */}
-        <div className="px-4 py-2 border-t border-gray-700 flex flex-wrap gap-1">
-          {examples.map((ex) => (
+        {/* Examples and Actions */}
+        <div className="px-4 py-2 border-t border-gray-700">
+          <div className="flex flex-wrap gap-1 mb-2">
+            {examples.map((ex) => (
+              <button
+                key={ex}
+                onClick={() => setInput(ex)}
+                className="px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-[10px] text-gray-400 transition-colors"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+          
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".tif,.tiff,.geotiff"
+              onChange={handleImportMDT}
+              className="hidden"
+            />
             <button
-              key={ex}
-              onClick={() => setInput(ex)}
-              className="px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-[10px] text-gray-400 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1 px-3 py-1.5 bg-teal-900/30 hover:bg-teal-900/50 border border-teal-700/50 rounded text-xs text-teal-300 transition-colors"
             >
-              {ex}
+              <Upload className="w-3.5 h-3.5" />
+              Importar MDT
             </button>
-          ))}
+            <button
+              onClick={handleShowDiagnostic}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-xs text-gray-400 transition-colors"
+            >
+              <Info className="w-3.5 h-3.5" />
+              Diagnóstico
+            </button>
+          </div>
         </div>
 
         {/* Input */}

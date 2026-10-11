@@ -6,10 +6,13 @@
  * 
  * NO usa modelos remotos. NO inventa resultados científicos.
  * Es un orquestador determinista basado en reglas.
+ * 
+ * Integrado con JOULE para cache de resultados.
  */
 
 import { MDTData, detectDepressions, detectLinearStructures } from './mdtProcessor';
 import { MissionState, Anomaly, AnomalyClassification } from './store';
+import { jouleGovernor } from './joule';
 
 export interface AICommand {
   id: string;
@@ -148,25 +151,51 @@ export async function executeCommand(
         break;
       }
       
-      // TODO: Integrar con JOULE para cache
-      // const cacheKey = `depressions_${mdt.checksumSHA256}_${command.parameters.minDepth}_${command.parameters.minArea}`;
-      // const cached = jouleCache.get(cacheKey);
-      // if (cached) return cached;
+      // Integrar con JOULE para cache
+      const cacheKey = `depressions_${mdt.checksumSHA256 || 'unknown'}_${command.parameters.minDepth}_${command.parameters.minArea}`;
       
-      const depressions = detectDepressions(
-        mdt,
-        command.parameters.minDepth,
-        command.parameters.minArea
-      );
-      output = {
-        count: depressions.length,
-        depressions: depressions.map(d => ({
-          id: d.id,
-          center: d.center,
-          depth: d.depth.toFixed(2),
-          area: d.area.toFixed(2),
-        })),
-      };
+      try {
+        const depressions = await jouleGovernor.execute(
+          'GEOSPATIAL_ANALYSIS',
+          'NORMAL',
+          {
+            type: 'depressions',
+            minDepth: command.parameters.minDepth,
+            minArea: command.parameters.minArea,
+          },
+          async () => {
+            return detectDepressions(
+              mdt,
+              command.parameters.minDepth,
+              command.parameters.minArea
+            );
+          },
+          {
+            sourceHash: mdt.checksumSHA256 || null,
+            crs: mdt.crs,
+            region: {
+              minX: mdt.bounds.xMin,
+              maxX: mdt.bounds.xMax,
+              minY: mdt.bounds.yMin,
+              maxY: mdt.bounds.yMax,
+            },
+            algorithmVersion: '1.0.0',
+          }
+        );
+        
+        output = {
+          count: depressions.length,
+          depressions: depressions.map(d => ({
+            id: d.id,
+            center: d.center,
+            depth: d.depth.toFixed(2),
+            area: d.area.toFixed(2),
+          })),
+          cached: false, // JOULE maneja el cache internamente
+        };
+      } catch (error) {
+        errors.push(`Error en análisis de depresiones: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      }
       break;
     }
     
@@ -177,23 +206,51 @@ export async function executeCommand(
         break;
       }
       
-      // TODO: Integrar con JOULE para cache
-      const structures = detectLinearStructures(
-        mdt,
-        command.parameters.minDepth,
-        command.parameters.minLength
-      );
-      output = {
-        count: structures.length,
-        structures: structures.map(s => ({
-          id: s.id,
-          startPoint: s.startPoint,
-          endPoint: s.endPoint,
-          length: s.length.toFixed(2),
-          depth: s.depth.toFixed(2),
-          orientation: s.orientation.toFixed(1),
-        })),
-      };
+      // Integrar con JOULE para cache
+      try {
+        const structures = await jouleGovernor.execute(
+          'GEOSPATIAL_ANALYSIS',
+          'NORMAL',
+          {
+            type: 'linear_structures',
+            minDepth: command.parameters.minDepth,
+            minLength: command.parameters.minLength,
+          },
+          async () => {
+            return detectLinearStructures(
+              mdt,
+              command.parameters.minDepth,
+              command.parameters.minLength
+            );
+          },
+          {
+            sourceHash: mdt.checksumSHA256 || null,
+            crs: mdt.crs,
+            region: {
+              minX: mdt.bounds.xMin,
+              maxX: mdt.bounds.xMax,
+              minY: mdt.bounds.yMin,
+              maxY: mdt.bounds.yMax,
+            },
+            algorithmVersion: '1.0.0',
+          }
+        );
+        
+        output = {
+          count: structures.length,
+          structures: structures.map(s => ({
+            id: s.id,
+            startPoint: s.startPoint,
+            endPoint: s.endPoint,
+            length: s.length.toFixed(2),
+            depth: s.depth.toFixed(2),
+            orientation: s.orientation.toFixed(1),
+          })),
+          cached: false,
+        };
+      } catch (error) {
+        errors.push(`Error en análisis de estructuras lineales: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      }
       break;
     }
     

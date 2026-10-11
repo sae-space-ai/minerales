@@ -72,16 +72,64 @@ export async function loadMDTFromFile(
     // Resolución
     const resolution = (xMax - xMin) / width;
     
-    // CRS (intentar detectar)
-    let crs = `EPSG:${targetEPSG}`;
+    // Validar que sea un raster válido (no una imagen RGB)
+    const samplesPerPixel = image.getSamplesPerPixel?.() || 1;
+    if (samplesPerPixel > 1) {
+      return {
+        success: false,
+        mdt: null,
+        errorMessage: `El archivo tiene ${samplesPerPixel} bandas. Se espera un raster de elevación de banda única.`,
+        processingTimeMs: performance.now() - startTime,
+      };
+    }
+    
+    // Validar dimensiones razonables
+    if (width < 2 || height < 2) {
+      return {
+        success: false,
+        mdt: null,
+        errorMessage: `Dimensiones inválidas: ${width}×${height}. Se requiere al menos 2×2 píxeles.`,
+        processingTimeMs: performance.now() - startTime,
+      };
+    }
+    
+    // Validar resolución
+    if (resolution <= 0 || !isFinite(resolution)) {
+      return {
+        success: false,
+        mdt: null,
+        errorMessage: `Resolución inválida: ${resolution}. Verifique los metadatos del GeoTIFF.`,
+        processingTimeMs: performance.now() - startTime,
+      };
+    }
+    
+    // CRS (intentar detectar desde GeoKeys)
+    let crs = 'DESCONOCIDO';
+    let crsDetected = false;
+    
     try {
       const imgAny = image as any;
       const geoKeys = imgAny.geoKeys || imgAny.getGeoKeys?.();
-      if (geoKeys && geoKeys.ProjectedCSTypeGeoKey) {
-        crs = `EPSG:${geoKeys.ProjectedCSTypeGeoKey}`;
+      
+      if (geoKeys) {
+        // Intentar ProjectedCSTypeGeoKey
+        if (geoKeys.ProjectedCSTypeGeoKey) {
+          crs = `EPSG:${geoKeys.ProjectedCSTypeGeoKey}`;
+          crsDetected = true;
+        }
+        // Intentar GeographicTypeGeoKey
+        else if (geoKeys.GeographicTypeGeoKey) {
+          crs = `EPSG:${geoKeys.GeographicTypeGeoKey}`;
+          crsDetected = true;
+        }
       }
-    } catch {
-      // CRS no detectado, usar el proporcionado
+    } catch (error) {
+      console.warn('No se pudo detectar CRS desde GeoKeys:', error);
+    }
+    
+    // Si no se detectó CRS, marcar como desconocido (no asumir)
+    if (!crsDetected) {
+      console.warn('CRS no detectado en el GeoTIFF. El archivo se cargará pero las coordenadas podrían ser incorrectas.');
     }
     
     const processingTimeMs = performance.now() - startTime;

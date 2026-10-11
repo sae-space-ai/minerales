@@ -58,7 +58,7 @@ export default function ExportPanel() {
       ['consulta_igme',missionData.igmeStatus.status,'RECUENTO_DESCONOCIDO'],
       ['hallazgos_mineros_confirmados','NO_EVALUADO','NO_CONCLUYENTE'],
     ];
-    const csv=rows.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');
+    const csv=rows.map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
     downloadFile('MINERAL01_estado_evidencias.csv','text/csv;charset=utf-8','\uFEFF'+csv);
   };
 

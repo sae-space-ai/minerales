@@ -49,7 +49,7 @@ export default function Dashboard() {
               Entorno del Cortijo de Daniela, Arroyo de Matarrama, TM Montemolín (Badajoz)
             </p>
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-gray-500">Linaje:</span>
+              <span className="text-xs text-gray-500">Etapas previstas (sin ejecución acreditada):</span>
               {mission.lineage.map((s) => (
                 <span key={s} className="px-2 py-0.5 bg-blue-900/40 text-blue-300 rounded text-xs font-mono">
                   {s}
@@ -62,7 +62,7 @@ export default function Dashboard() {
               {mission.processingStatus}
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Actualizado: {new Date(mission.updatedAt).toLocaleString('es-ES')}
+              Fecha de corte documental: 11/10/2026 (sin sincronización automática)
             </div>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-1 text-xs text-gray-400">
             <p><span className="text-gray-500">Archivo:</span> {mission.lasStatus.filename}</p>
-            <p><span className="text-gray-500">Puntos:</span> {mission.lasStatus.pointCount.toLocaleString()}</p>
+            <p><span className="text-gray-500">Puntos declarados en cabecera:</span> {mission.lasStatus.pointCount.toLocaleString('es-ES')}</p>
             <p><span className="text-gray-500">Tamaño:</span> {(mission.lasStatus.fileSize / 1024 / 1024).toFixed(1)} MB</p>
             <p><span className="text-gray-500">CRS:</span> {mission.lasStatus.crs}</p>
             <p><span className="text-gray-500">Versión:</span> LAS {mission.lasStatus.version}</p>

@@ -19,10 +19,10 @@ export default function AnomalyPanel() {
         </h2>
         <div className="flex items-center gap-2">
           <span className="px-3 py-1 bg-gray-800 rounded-lg text-sm text-gray-300">
-            {anomalies.length} anomalías
+            {anomalies.length === 0 ? 'Sin evaluación' : `${anomalies.length} registros`}
           </span>
           <span className="px-3 py-1 bg-red-900/30 rounded-lg text-sm text-red-300">
-            0 confirmadas
+            No concluyente
           </span>
         </div>
       </div>
@@ -38,6 +38,13 @@ export default function AnomalyPanel() {
         </p>
       </div>
 
+      {anomalies.length === 0 && (
+        <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-5 text-sm text-gray-300">
+          No se han ejecutado algoritmos de detección sobre el MDT real del Cortijo de Daniela.
+          No disponer de anomalías registradas no demuestra que no existan excavaciones, escombreras ni
+          indicios mineros. Se necesitan datos georreferenciados y revisión científica.
+        </div>
+      )}
       <div className="space-y-4">
         {anomalies.map((anomaly) => {
           const evStyle = evidenceColors[anomaly.evidenceLevel];

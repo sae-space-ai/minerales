@@ -334,6 +334,7 @@ export interface MissionContextType {
   loadLASFile: (file: File) => Promise<void>;
   processLAZFull: (file: File) => Promise<void>;
   loadMDT: (file: File) => Promise<void>;
+  generateMDTFromLiDAR: (resolution?: number) => Promise<void>;
   queryIGME: () => Promise<void>;
   updateThresholds: (thresholds: { minDepth: number; minSlope: number; minArea: number }) => void;
   getLoadedMDT: () => MDTData | null;

@@ -8,9 +8,10 @@ import {
 } from '../lib/store';
 import { readLASHeader, computeSHA256, computePointDensity } from '../lib/lasReader';
 import { decompressLAZ } from '../lib/lazProcessor';
-import { loadMDTFromFile, MDTData } from '../lib/mdtProcessor';
+import { loadMDTFromFile, generateMDTFromLiDAR as generateMDTFromLiDARProcessor, MDTData } from '../lib/mdtProcessor';
 import { queryIGME, queryIGMEViaProxy } from '../lib/igmeClient';
 import { saveMDTToCache, loadMDTFromCache, validateMDTIntegrity } from '../lib/mdtPersistence';
+import { detectGeoFileType, suggestAction } from '../lib/fileDetector';
 
 interface MissionProviderProps {
   children: ReactNode;
@@ -27,6 +28,15 @@ export function MissionProvider({ children }: MissionProviderProps) {
 
   // Referencia estable para el MDT completo (no se guarda en estado React para evitar re-renders)
   const mdtDataRef = useRef<MDTData | null>(null);
+  
+  // Referencia para los puntos LiDAR descomprimidos (usados para generar MDT)
+  const lidarPointsRef = useRef<{
+    points: Float32Array;
+    pointCount: number;
+    bounds: { xMin: number; xMax: number; yMin: number; yMax: number };
+    crs: string;
+    source: string;
+  } | null>(null);
 
   // Restaurar MDT de IndexedDB al iniciar (si existe y está autorizado)
   useEffect(() => {
@@ -300,6 +310,15 @@ export function MissionProvider({ children }: MissionProviderProps) {
         return;
       }
 
+      // Guardar puntos para generar MDT después
+      lidarPointsRef.current = {
+        points: result.samplePoints || new Float32Array(0),
+        pointCount: result.pointCount,
+        bounds: result.bounds,
+        crs: state.lasFile.crsOriginal || 'EPSG:25829',
+        source: file.name,
+      };
+      
       setState((prev) => ({
         ...prev,
         updatedAt: new Date().toISOString(),
@@ -342,6 +361,59 @@ export function MissionProvider({ children }: MissionProviderProps) {
   }, []);
 
   const loadMDT = useCallback(async (file: File) => {
+    // PASO 1: Detectar el formato real del archivo
+    const detection = await detectGeoFileType(file);
+    const suggestion = suggestAction(detection);
+    
+    // PASO 2: Si es LAZ/LAS, rechazar y sugerir el procesador correcto
+    if (detection.type === 'LAS' || detection.type === 'LAZ') {
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          filename: null,
+          width: null,
+          height: null,
+          resolution: null,
+          bounds: null,
+          crs: null,
+          noDataValue: null,
+          status: 'FAILED',
+          dataClassification: 'FAILED',
+          timestamp: null,
+          errorMessage: `⚠️ Este archivo es ${detection.type} (LiDAR), no un GeoTIFF (MDT).\n\n` +
+            `Para procesar este archivo:\n` +
+            `1. Use el botón "Cargar archivo LAS/LAZ" en la sección LiDAR\n` +
+            `2. Después de descomprimir, podrá generar un MDT desde los puntos Ground\n\n` +
+            `${suggestion.details || ''}`,
+        },
+      }));
+      return;
+    }
+    
+    // PASO 3: Si el archivo es inválido, rechazar
+    if (detection.type === 'INVALID' || detection.type === 'UNKNOWN') {
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          filename: null,
+          width: null,
+          height: null,
+          resolution: null,
+          bounds: null,
+          crs: null,
+          noDataValue: null,
+          status: 'FAILED',
+          dataClassification: 'FAILED',
+          timestamp: null,
+          errorMessage: `❌ ${suggestion.message}\n\n${suggestion.details || ''}`,
+        },
+      }));
+      return;
+    }
+    
+    // PASO 4: Si es GeoTIFF/COG, procesar como MDT
     // Invalidar MDT anterior inmediatamente
     mdtDataRef.current = null;
     
@@ -349,10 +421,17 @@ export function MissionProvider({ children }: MissionProviderProps) {
       ...prev,
       updatedAt: new Date().toISOString(),
       mdt: {
-        ...prev.mdt,
         filename: file.name,
+        width: null,
+        height: null,
+        resolution: null,
+        bounds: null,
+        crs: null,
+        noDataValue: null,
         status: 'IN_PROGRESS',
-        errorMessage: null,
+        dataClassification: 'PENDING',
+        timestamp: null,
+        errorMessage: `Detectado: ${detection.type}. Procesando...`,
       },
     }));
 
@@ -366,10 +445,18 @@ export function MissionProvider({ children }: MissionProviderProps) {
           ...prev,
           updatedAt: new Date().toISOString(),
           mdt: {
-            ...prev.mdt,
+            filename: null,
+            width: null,
+            height: null,
+            resolution: null,
+            bounds: null,
+            crs: null,
+            noDataValue: null,
             status: 'FAILED',
-            errorMessage: result.errorMessage || 'Error cargando MDT',
             dataClassification: 'FAILED',
+            timestamp: null,
+            errorMessage: `❌ Error procesando GeoTIFF:\n\n${result.errorMessage || 'Error desconocido'}\n\n` +
+              `Verifique que el archivo es un GeoTIFF válido con elevaciones en una banda única.`,
           },
         }));
         return;
@@ -415,10 +502,18 @@ export function MissionProvider({ children }: MissionProviderProps) {
         ...prev,
         updatedAt: new Date().toISOString(),
         mdt: {
-          ...prev.mdt,
+          filename: null,
+          width: null,
+          height: null,
+          resolution: null,
+          bounds: null,
+          crs: null,
+          noDataValue: null,
           status: 'FAILED',
-          errorMessage,
           dataClassification: 'FAILED',
+          timestamp: null,
+          errorMessage: `❌ Error inesperado:\n\n${errorMessage}\n\n` +
+            `Verifique que el archivo es un GeoTIFF válido.`,
         },
       }));
     }
@@ -433,6 +528,158 @@ export function MissionProvider({ children }: MissionProviderProps) {
     return null;
   }, [state.mdt.status]);
 
+  // Función para generar MDT desde puntos LiDAR Ground
+  const generateMDTFromLiDAR = useCallback(async (resolution: number = 1.0) => {
+    // Verificar que hay puntos LiDAR disponibles
+    if (!lidarPointsRef.current) {
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          filename: null,
+          width: null,
+          height: null,
+          resolution: null,
+          bounds: null,
+          crs: null,
+          noDataValue: null,
+          status: 'FAILED',
+          dataClassification: 'FAILED',
+          timestamp: null,
+          errorMessage: '❌ No hay puntos LiDAR disponibles. Primero debe cargar y descomprimir un archivo LAS/LAZ.',
+        },
+      }));
+      return;
+    }
+    
+    const { points, pointCount, bounds, crs, source } = lidarPointsRef.current;
+    
+    // Extraer puntos Ground (clase 2)
+    const groundPoints: Array<[number, number, number]> = [];
+    
+    for (let i = 0; i < pointCount; i++) {
+      const offset = i * 5;
+      const x = points[offset];
+      const y = points[offset + 1];
+      const z = points[offset + 2];
+      const classification = points[offset + 3];
+      
+      // Clase 2 = Ground según especificación ASPRS LAS
+      if (Math.round(classification) === 2) {
+        groundPoints.push([x, y, z]);
+      }
+    }
+    
+    setState((prev) => ({
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      mdt: {
+        filename: `${source} (MDT generado)`,
+        width: null,
+        height: null,
+        resolution,
+        bounds: {
+          xMin: bounds.xMin,
+          xMax: bounds.xMax,
+          yMin: bounds.yMin,
+          yMax: bounds.yMax,
+        },
+        crs,
+        noDataValue: null,
+        status: 'IN_PROGRESS',
+        dataClassification: 'CALCULATED',
+        timestamp: null,
+        errorMessage: `Generando MDT desde ${groundPoints.length} puntos Ground...`,
+      },
+    }));
+    
+    try {
+      const result = generateMDTFromLiDARProcessor(
+        groundPoints,
+        bounds,
+        resolution,
+        crs,
+        source
+      );
+      
+      if (!result.success || !result.mdt) {
+        setState((prev) => ({
+          ...prev,
+          updatedAt: new Date().toISOString(),
+          mdt: {
+            filename: null,
+            width: null,
+            height: null,
+            resolution: null,
+            bounds: null,
+            crs: null,
+            noDataValue: null,
+            status: 'FAILED',
+            dataClassification: 'FAILED',
+            timestamp: null,
+            errorMessage: `❌ Error generando MDT:\n\n${result.errorMessage || 'Error desconocido'}`,
+          },
+        }));
+        return;
+      }
+      
+      const mdt = result.mdt;
+      
+      // Guardar MDT completo en ref estable
+      mdtDataRef.current = mdt;
+      
+      // Guardar en IndexedDB
+      try {
+        const encoder = new TextEncoder();
+        const encoded = encoder.encode(source + Date.now());
+        const checksum = await computeSHA256(encoded.buffer as ArrayBuffer);
+        await saveMDTToCache(mdt, `${source}_mdt.tif`, checksum, mdt.grid.byteLength, true);
+        console.log('✅ MDT generado desde LiDAR guardado en IndexedDB');
+      } catch (error) {
+        console.warn('No se pudo guardar MDT en IndexedDB:', error);
+      }
+      
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          filename: `${source} (MDT generado)`,
+          width: mdt.width,
+          height: mdt.height,
+          resolution: mdt.resolution,
+          bounds: mdt.bounds,
+          crs: mdt.crs,
+          noDataValue: mdt.noDataValue,
+          status: 'COMPLETED',
+          dataClassification: 'CALCULATED',
+          timestamp: mdt.timestamp,
+          errorMessage: null,
+        },
+      }));
+      
+      console.log(`✅ MDT generado desde LiDAR: ${mdt.width}×${mdt.height} píxeles, resolución ${mdt.resolution}m`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          filename: null,
+          width: null,
+          height: null,
+          resolution: null,
+          bounds: null,
+          crs: null,
+          noDataValue: null,
+          status: 'FAILED',
+          dataClassification: 'FAILED',
+          timestamp: null,
+          errorMessage: `❌ Error inesperado generando MDT:\n\n${errorMessage}`,
+        },
+      }));
+    }
+  }, []);
+
   return (
     <MissionContext.Provider
       value={{
@@ -441,6 +688,7 @@ export function MissionProvider({ children }: MissionProviderProps) {
         loadLASFile,
         processLAZFull,
         loadMDT,
+        generateMDTFromLiDAR,
         queryIGME: queryIGMEAction,
         updateThresholds,
         getLoadedMDT,

@@ -468,3 +468,153 @@ export function detectLinearStructures(
   
   return structures;
 }
+
+/**
+ * Genera un MDT a partir de puntos LiDAR clasificados como Ground.
+ * 
+ * Utiliza interpolación IDW (Inverse Distance Weighting) para crear
+ * un raster de elevaciones a partir de los puntos de terreno.
+ * 
+ * @param groundPoints - Array de puntos Ground [x, y, z]
+ * @param bounds - Límites del MDT a generar
+ * @param resolution - Resolución en metros por píxel
+ * @param crs - Sistema de referencia de coordenadas
+ * @param source - Nombre del archivo fuente
+ * @returns Resultado de la generación del MDT
+ */
+export function generateMDTFromLiDAR(
+  groundPoints: Array<[number, number, number]>,
+  bounds: { xMin: number; xMax: number; yMin: number; yMax: number },
+  resolution: number,
+  crs: string,
+  source: string
+): MDTLoadResult {
+  const startTime = performance.now();
+  
+  // Validar que hay puntos suficientes
+  if (groundPoints.length === 0) {
+    return {
+      success: false,
+      mdt: null,
+      errorMessage: 'No hay puntos Ground disponibles. Verifique que el archivo LiDAR tiene puntos clasificados como Ground (clase 2).',
+      processingTimeMs: performance.now() - startTime,
+    };
+  }
+  
+  if (groundPoints.length < 10) {
+    return {
+      success: false,
+      mdt: null,
+      errorMessage: `Solo hay ${groundPoints.length} puntos Ground. Se requieren al menos 10 puntos para generar un MDT fiable.`,
+      processingTimeMs: performance.now() - startTime,
+    };
+  }
+  
+  // Calcular dimensiones del raster
+  const width = Math.ceil((bounds.xMax - bounds.xMin) / resolution);
+  const height = Math.ceil((bounds.yMax - bounds.yMin) / resolution);
+  
+  if (width <= 0 || height <= 0) {
+    return {
+      success: false,
+      mdt: null,
+      errorMessage: `Dimensiones inválidas: ${width}×${height}. Verifique los límites y la resolución.`,
+      processingTimeMs: performance.now() - startTime,
+    };
+  }
+  
+  // Crear grid de elevaciones
+  const grid = new Float32Array(width * height);
+  const noDataValue = -9999;
+  
+  // Inicializar con NoData
+  grid.fill(noDataValue);
+  
+  // Parámetros de interpolación IDW
+  const power = 2; // Exponente de distancia
+  const searchRadius = resolution * 10; // Radio de búsqueda (10 píxeles)
+  const minPointsRequired = 3; // Mínimo de puntos para interpolar
+  
+  // Interpolar elevaciones usando IDW
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      // Coordenadas del centro del píxel
+      const x = bounds.xMin + (col + 0.5) * resolution;
+      const y = bounds.yMin + (row + 0.5) * resolution;
+      
+      // Buscar puntos dentro del radio de búsqueda
+      const nearbyPoints: Array<{ point: [number, number, number]; distance: number }> = [];
+      
+      for (const point of groundPoints) {
+        const dx = point[0] - x;
+        const dy = point[1] - y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance <= searchRadius) {
+          nearbyPoints.push({ point, distance });
+        }
+      }
+      
+      // Si no hay suficientes puntos, dejar como NoData
+      if (nearbyPoints.length < minPointsRequired) {
+        continue;
+      }
+      
+      // Si hay un punto muy cercano, usar su elevación directamente
+      const closest = nearbyPoints.reduce((min, p) => p.distance < min.distance ? p : min);
+      if (closest.distance < 0.01) {
+        grid[row * width + col] = closest.point[2];
+        continue;
+      }
+      
+      // Interpolar usando IDW
+      let sumWeights = 0;
+      let sumValues = 0;
+      
+      for (const { point, distance } of nearbyPoints) {
+        const weight = 1 / Math.pow(distance, power);
+        sumWeights += weight;
+        sumValues += weight * point[2];
+      }
+      
+      if (sumWeights > 0) {
+        grid[row * width + col] = sumValues / sumWeights;
+      }
+    }
+  }
+  
+  // Contar píxeles con datos
+  let validPixels = 0;
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] !== noDataValue) {
+      validPixels++;
+    }
+  }
+  
+  const coveragePercent = (validPixels / grid.length) * 100;
+  
+  // Advertir si la cobertura es baja
+  if (coveragePercent < 50) {
+    console.warn(`⚠️ Cobertura baja del MDT generado: ${coveragePercent.toFixed(1)}% de píxeles con datos.`);
+  }
+  
+  const processingTimeMs = performance.now() - startTime;
+  
+  console.log(`✅ MDT generado desde LiDAR: ${width}×${height} píxeles, ${validPixels} válidos (${coveragePercent.toFixed(1)}%), ${processingTimeMs.toFixed(2)}ms`);
+  
+  return {
+    success: true,
+    mdt: {
+      grid,
+      width,
+      height,
+      resolution,
+      bounds,
+      noDataValue,
+      crs,
+      source: `${source} (MDT generado desde LiDAR)`,
+      timestamp: new Date().toISOString(),
+    },
+    processingTimeMs,
+  };
+}

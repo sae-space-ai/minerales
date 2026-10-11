@@ -1,4 +1,4 @@
-import { useState, useCallback, ReactNode } from 'react';
+import { useState, useCallback, useRef, ReactNode } from 'react';
 import {
   MissionContext,
   MissionState,
@@ -8,7 +8,7 @@ import {
 } from '../lib/store';
 import { readLASHeader, computeSHA256, computePointDensity } from '../lib/lasReader';
 import { decompressLAZ } from '../lib/lazProcessor';
-import { loadMDTFromFile } from '../lib/mdtProcessor';
+import { loadMDTFromFile, MDTData } from '../lib/mdtProcessor';
 import { queryIGME, queryIGMEViaProxy } from '../lib/igmeClient';
 
 interface MissionProviderProps {
@@ -23,6 +23,9 @@ export function MissionProvider({ children }: MissionProviderProps) {
     demoState.coverageGaps = DEMO_COVERAGE_GAPS;
     return demoState;
   });
+
+  // Referencia estable para el MDT completo (no se guarda en estado React para evitar re-renders)
+  const mdtDataRef = useRef<MDTData | null>(null);
 
   const setMode = useCallback((mode: 'DEMO' | 'REAL') => {
     setState((prev) => {
@@ -302,6 +305,9 @@ export function MissionProvider({ children }: MissionProviderProps) {
   }, []);
 
   const loadMDT = useCallback(async (file: File) => {
+    // Invalidar MDT anterior inmediatamente
+    mdtDataRef.current = null;
+    
     setState((prev) => ({
       ...prev,
       updatedAt: new Date().toISOString(),
@@ -317,6 +323,8 @@ export function MissionProvider({ children }: MissionProviderProps) {
       const result = await loadMDTFromFile(file);
 
       if (!result.success || !result.mdt) {
+        // Limpiar ref en caso de fallo
+        mdtDataRef.current = null;
         setState((prev) => ({
           ...prev,
           updatedAt: new Date().toISOString(),
@@ -331,6 +339,10 @@ export function MissionProvider({ children }: MissionProviderProps) {
       }
 
       const mdt = result.mdt;
+      
+      // Guardar MDT completo en ref estable (no en estado React)
+      mdtDataRef.current = mdt;
+      
       setState((prev) => ({
         ...prev,
         updatedAt: new Date().toISOString(),
@@ -349,6 +361,8 @@ export function MissionProvider({ children }: MissionProviderProps) {
         },
       }));
     } catch (error) {
+      // Limpiar ref en caso de error
+      mdtDataRef.current = null;
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       setState((prev) => ({
         ...prev,
@@ -363,6 +377,15 @@ export function MissionProvider({ children }: MissionProviderProps) {
     }
   }, []);
 
+  // Función para obtener el MDT completo (usada por MINERAL-AI y herramientas científicas)
+  const getLoadedMDT = useCallback((): MDTData | null => {
+    // Solo devolver si el estado indica COMPLETED y el ref tiene datos
+    if (state.mdt.status === 'COMPLETED' && mdtDataRef.current) {
+      return mdtDataRef.current;
+    }
+    return null;
+  }, [state.mdt.status]);
+
   return (
     <MissionContext.Provider
       value={{
@@ -373,6 +396,7 @@ export function MissionProvider({ children }: MissionProviderProps) {
         loadMDT,
         queryIGME: queryIGMEAction,
         updateThresholds,
+        getLoadedMDT,
       }}
     >
       {children}

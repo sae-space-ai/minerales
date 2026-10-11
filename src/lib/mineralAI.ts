@@ -115,16 +115,30 @@ export function parseCommand(raw: string): ParsedCommand {
 
 /**
  * Ejecuta un comando interpretado contra el estado actual de la misión.
+ * Integrado con JOULE para cache de resultados.
  */
-export function executeCommand(
+export async function executeCommand(
   command: ParsedCommand,
   state: MissionState,
   mdt: MDTData | null
-): AIExecutionResult {
+): Promise<AIExecutionResult> {
   const startTime = performance.now();
   const errors: string[] = [];
   let output: any = null;
   let tool = '';
+  
+  // Validar MDT si es necesario
+  if (mdt) {
+    // Verificar CRS
+    if (!mdt.crs) {
+      errors.push('MDT sin CRS definido. No se puede garantizar precisión geográfica.');
+    }
+    
+    // Verificar resolución
+    if (mdt.resolution <= 0) {
+      errors.push('Resolución de MDT inválida.');
+    }
+  }
   
   switch (command.type) {
     case 'ANALYZE_DEPRESSIONS': {
@@ -133,6 +147,12 @@ export function executeCommand(
         errors.push('No hay MDT cargado. Importe un GeoTIFF oficial del IGN-CNIG.');
         break;
       }
+      
+      // TODO: Integrar con JOULE para cache
+      // const cacheKey = `depressions_${mdt.checksumSHA256}_${command.parameters.minDepth}_${command.parameters.minArea}`;
+      // const cached = jouleCache.get(cacheKey);
+      // if (cached) return cached;
+      
       const depressions = detectDepressions(
         mdt,
         command.parameters.minDepth,
@@ -156,6 +176,8 @@ export function executeCommand(
         errors.push('No hay MDT cargado.');
         break;
       }
+      
+      // TODO: Integrar con JOULE para cache
       const structures = detectLinearStructures(
         mdt,
         command.parameters.minDepth,

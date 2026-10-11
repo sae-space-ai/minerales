@@ -14,6 +14,7 @@
  */
 
 import { createContext, useContext } from 'react';
+import type { MDTData } from './mdtProcessor';
 
 export type DataClassification =
   | 'OFFICIAL'
@@ -335,6 +336,7 @@ export interface MissionContextType {
   loadMDT: (file: File) => Promise<void>;
   queryIGME: () => Promise<void>;
   updateThresholds: (thresholds: { minDepth: number; minSlope: number; minArea: number }) => void;
+  getLoadedMDT: () => MDTData | null;
 }
 
 export const MissionContext = createContext<MissionContextType | null>(null);

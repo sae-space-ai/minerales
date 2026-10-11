@@ -12,7 +12,7 @@ interface ChatMessage {
 }
 
 export default function AIPanel() {
-  const { state } = useMission();
+  const { state, getLoadedMDT } = useMission();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -28,7 +28,7 @@ export default function AIPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMessage: ChatMessage = {
@@ -39,7 +39,43 @@ export default function AIPanel() {
     };
 
     const parsed = parseCommand(input);
-    const execution = executeCommand(parsed, state, null); // MDT no cargado en este contexto
+    
+    // Obtener MDT real si está disponible
+    const mdt = getLoadedMDT();
+    
+    // Verificar si el comando requiere MDT pero no está disponible
+    const requiresMDT = parsed.type === 'ANALYZE_DEPRESSIONS' || 
+                        parsed.type === 'SEARCH_LINEAR';
+    
+    if (requiresMDT && !mdt) {
+      const execution: AIExecutionResult = {
+        commandId: `cmd-${Date.now()}`,
+        success: false,
+        tool: 'none',
+        input: parsed.parameters,
+        output: null,
+        errors: ['No hay MDT cargado. Por favor, importe un archivo GeoTIFF desde el Dashboard antes de ejecutar análisis geomorfológicos.'],
+        timestamp: new Date().toISOString(),
+        duration: 0,
+      };
+      
+      const response = formatResult(execution);
+      
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: response,
+        timestamp: new Date().toISOString(),
+        execution,
+      };
+      
+      setMessages((prev) => [...prev, userMessage, assistantMessage]);
+      setInput('');
+      return;
+    }
+    
+    // Ejecutar comando con MDT real
+    const execution = await executeCommand(parsed, state, mdt);
     const response = formatResult(execution);
 
     const assistantMessage: ChatMessage = {

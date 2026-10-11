@@ -43,6 +43,9 @@ export interface LAZDecompressionResult {
   // Tiempo de procesamiento
   processingTimeMs: number;
   
+  // Puntos descomprimidos (precisión doble para cálculos científicos)
+  points: Float64Array | null;
+  
   // Muestra de puntos (para visualización, máx 10000)
   samplePoints: Float32Array | null;
   sampleSize: number;
@@ -68,6 +71,8 @@ type ProgressCallback = (progress: ProcessingProgress) => void;
  * 
  * Para archivos LAS sin compresión, lee directamente.
  * Para LAZ, usa laz-perf para descomprimir.
+ * 
+ * IMPORTANTE: Usa Float64Array para mantener precisión en coordenadas UTM.
  */
 export async function decompressLAZ(
   buffer: ArrayBuffer,
@@ -93,6 +98,7 @@ export async function decompressLAZ(
       classDistribution: {},
       returnDistribution: {},
       processingTimeMs: 0,
+      points: null,
       samplePoints: null,
       sampleSize: 0,
       header,
@@ -111,7 +117,7 @@ export async function decompressLAZ(
   
   try {
     // Intentar usar laz-perf para LAZ
-    let points: Float32Array;
+    let points: Float64Array;
     let pointCount: number;
     
     if (header.isCompressed) {
@@ -161,7 +167,7 @@ export async function decompressLAZ(
       totalPoints: pointCount,
     });
     
-    // Crear muestra para visualización
+    // Crear muestra para visualización (convertir a Float32 para ahorrar memoria)
     const sample = createSample(points, pointCount, maxSamplePoints);
     
     const processingTimeMs = performance.now() - startTime;
@@ -186,6 +192,7 @@ export async function decompressLAZ(
       classDistribution: analysis.classDistribution,
       returnDistribution: analysis.returnDistribution,
       processingTimeMs,
+      points, // Puntos completos en Float64 para cálculos científicos
       samplePoints: sample,
       sampleSize: Math.min(pointCount, maxSamplePoints),
       header,
@@ -205,6 +212,7 @@ export async function decompressLAZ(
       classDistribution: {},
       returnDistribution: {},
       processingTimeMs: performance.now() - startTime,
+      points: null,
       samplePoints: null,
       sampleSize: 0,
       header,
@@ -215,83 +223,104 @@ export async function decompressLAZ(
 }
 
 /**
- * Descomprime LAZ usando laz-perf.
+ * Descomprime LAZ usando laz-perf con la API correcta.
+ * 
+ * API correcta según documentación oficial (https://github.com/hobuinc/laz-perf):
+ * 
+ * import { createLazPerf } from 'laz-perf'
+ * const LazPerf = await createLazPerf()
+ * const laszip = new LazPerf.LASZip()
+ * laszip.open(filePointer, fileByteLength)
+ * for (let i = 0; i < pointCount; ++i) {
+ *     laszip.getPoint(dataPointer)
+ * }
  */
 async function decompressWithLazPerf(
   buffer: ArrayBuffer,
   header: LASHeaderInfo
-): Promise<{ points: Float32Array; pointCount: number }> {
-  // Intentar importar laz-perf dinámicamente
+): Promise<{ points: Float64Array; pointCount: number }> {
   try {
+    // Importar laz-perf usando la API correcta
     const lazPerfModule = await import('laz-perf');
     
-    // laz-perf expone una API para descomprimir
-    // La API exacta depende de la versión; usamos la más común
-    const factory = (lazPerfModule as any).default || lazPerfModule;
-    const module = typeof factory === 'function' ? await factory() : factory;
+    // API correcta: createLazPerf() inicializa el módulo WASM
+    const createLazPerf = (lazPerfModule as any).createLazPerf || lazPerfModule.default;
     
-    // Crear descompresor para el formato de punto
-    const decoder = new module.LASZip();
+    if (!createLazPerf) {
+      throw new Error('laz-perf: createLazPerf no disponible. Verifique la versión instalada.');
+    }
     
-    // Obtener datos desde el offset
+    // Inicializar el módulo WASM
+    const LazPerf = await createLazPerf();
+    
+    if (!LazPerf || !LazPerf.LASZip) {
+      throw new Error('laz-perf: Módulo WASM no inicializado correctamente.');
+    }
+    
+    // Crear instancia del descompresor
+    const laszip = new LazPerf.LASZip();
+    
+    // Obtener datos comprimidos desde el offset
     const pointDataOffset = header.offsetToPointData;
-    const pointData = new Uint8Array(buffer, pointDataOffset);
+    const pointDataLength = buffer.byteLength - pointDataOffset;
+    const pointData = new Uint8Array(buffer, pointDataOffset, pointDataLength);
     
-    // Descomprimir
-    decoder.open(pointData);
+    // Copiar datos al heap de WASM
+    const filePointer = LazPerf._malloc(pointDataLength);
+    LazPerf.HEAPU8.set(pointData, filePointer);
+    
+    // Abrir el archivo comprimido
+    laszip.open(filePointer, pointDataLength);
     
     const pointCount = header.numberOfPoints;
     const pointFormat = header.pointDataRecordFormat;
     
-    // Tamaño del punto según formato (aproximado)
-    const pointSize = getPointSize(pointFormat);
+    // Tamaño real del punto según la cabecera
+    const pointSize = header.pointDataRecordLength;
     
-    // Buffer para puntos descomprimidos
-    const decompressedBuffer = new ArrayBuffer(pointCount * pointSize);
-    const decompressedView = new Uint8Array(decompressedBuffer);
+    // Buffer para puntos descomprimidos (usar Float64 para precisión)
+    // 5 valores por punto: X, Y, Z (double), classification (uint8), returnNumber (uint8)
+    const points = new Float64Array(pointCount * 5);
+    
+    // Buffer temporal para cada punto
+    const pointBuffer = LazPerf._malloc(pointSize);
     
     // Leer punto por punto
     for (let i = 0; i < pointCount; i++) {
-      const pointBuffer = new ArrayBuffer(pointSize);
-      decoder.getPoint(pointBuffer);
-      decompressedView.set(new Uint8Array(pointBuffer), i * pointSize);
-    }
-    
-    decoder.delete();
-    
-    // Convertir a Float32Array con X, Y, Z, classification, returnNumber
-    // 5 valores por punto
-    const points = new Float32Array(pointCount * 5);
-    
-    for (let i = 0; i < pointCount; i++) {
-      const offset = i * pointSize;
-      const view = new DataView(decompressedBuffer, offset, pointSize);
+      // Descomprimir punto
+      laszip.getPoint(pointBuffer);
       
-      // Leer coordenadas como enteros y aplicar escala/offset
+      // Leer datos del punto desde el heap de WASM
+      const view = new DataView(LazPerf.HEAPU8.buffer, pointBuffer, pointSize);
+      
+      // Leer coordenadas como enteros y aplicar escala/offset (precisión doble)
       const xRaw = view.getInt32(0, true);
       const yRaw = view.getInt32(4, true);
       const zRaw = view.getInt32(8, true);
       
+      // Aplicar escala y offset para obtener coordenadas reales
       const x = xRaw * header.xScale + header.xOffset;
       const y = yRaw * header.yScale + header.yOffset;
       const z = zRaw * header.zScale + header.zOffset;
       
-      // Classification está en offset 16 para formato 0-5, o variable para 6+
+      // Classification y returnNumber según formato de punto
       let classification = 0;
       let returnNumber = 0;
       
       if (pointFormat <= 5) {
+        // Formatos 0-5: clasificación en offset 15, return flags en offset 14
         const flags = view.getUint8(14);
-        returnNumber = flags & 0x07;
+        returnNumber = flags & 0x07; // 3 bits
         classification = view.getUint8(15);
-      } else {
-        // Formato 6+: clasificación en offset 16 (14 bits)
+      } else if (pointFormat >= 6 && pointFormat <= 10) {
+        // Formatos 6-10 (LAS 1.4): clasificación en offset 16 (14 bits)
         const classCode = view.getUint16(16, true);
-        classification = classCode & 0x3FFF;
+        classification = classCode & 0x3FFF; // 14 bits
         const flags6 = view.getUint8(14);
-        returnNumber = flags6 & 0x0F;
+        returnNumber = flags6 & 0x0F; // 4 bits
       }
       
+      // Almacenar en array de precisión doble
       const idx = i * 5;
       points[idx] = x;
       points[idx + 1] = y;
@@ -300,24 +329,36 @@ async function decompressWithLazPerf(
       points[idx + 4] = returnNumber;
     }
     
+    // Liberar recursos
+    LazPerf._free(pointBuffer);
+    LazPerf._free(filePointer);
+    laszip.delete();
+    
+    // Validar que se leyeron todos los puntos
+    if (pointCount !== header.numberOfPoints) {
+      throw new Error(`Número de puntos leídos (${pointCount}) no coincide con el esperado (${header.numberOfPoints})`);
+    }
+    
     return { points, pointCount };
   } catch (error) {
-    throw new Error(`laz-perf no disponible o error de descompresión: ${error instanceof Error ? error.message : 'desconocido'}`);
+    const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+    throw new Error(`laz-perf: Error de descompresión: ${errorMsg}`);
   }
 }
 
 /**
  * Lee puntos de un archivo LAS sin compresión.
+ * Usa Float64Array para mantener precisión en coordenadas UTM.
  */
 function readLASPoints(
   buffer: ArrayBuffer,
   header: LASHeaderInfo
-): { points: Float32Array; pointCount: number } {
+): { points: Float64Array; pointCount: number } {
   const pointCount = header.numberOfPoints;
   const pointSize = header.pointDataRecordLength;
   const offset = header.offsetToPointData;
   
-  const points = new Float32Array(pointCount * 5);
+  const points = new Float64Array(pointCount * 5);
   const view = new DataView(buffer);
   
   for (let i = 0; i < pointCount; i++) {
@@ -360,9 +401,10 @@ function readLASPoints(
 
 /**
  * Analiza los puntos descomprimidos.
+ * Acepta Float64Array para mantener precisión en coordenadas UTM.
  */
 function analyzePoints(
-  points: Float32Array,
+  points: Float64Array,
   pointCount: number,
   header: LASHeaderInfo
 ): {
@@ -452,8 +494,9 @@ function analyzePoints(
 
 /**
  * Crea una muestra de puntos para visualización.
+ * Convierte de Float64Array (precisión) a Float32Array (visualización).
  */
-function createSample(points: Float32Array, pointCount: number, maxSample: number): Float32Array {
+function createSample(points: Float64Array, pointCount: number, maxSample: number): Float32Array {
   const sampleSize = Math.min(pointCount, maxSample);
   const sample = new Float32Array(sampleSize * 5);
   

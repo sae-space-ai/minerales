@@ -8,7 +8,8 @@ import {
 } from '../lib/store';
 import { readLASHeader, computeSHA256, computePointDensity } from '../lib/lasReader';
 import { decompressLAZ } from '../lib/lazProcessor';
-import { loadMDTFromFile, generateMDTFromLiDAR as generateMDTFromLiDARProcessor, MDTData } from '../lib/mdtProcessor';
+import { loadMDTFromFile, MDTData } from '../lib/mdtProcessor';
+import { generateMDTFromLiDAROptimized } from '../lib/mdtGenerator';
 import { queryIGME, queryIGMEViaProxy } from '../lib/igmeClient';
 import { saveMDTToCache, loadMDTFromCache, validateMDTIntegrity } from '../lib/mdtPersistence';
 import { detectGeoFileType, suggestAction } from '../lib/fileDetector';
@@ -594,12 +595,17 @@ export function MissionProvider({ children }: MissionProviderProps) {
     }));
     
     try {
-      const result = generateMDTFromLiDARProcessor(
+      const result = generateMDTFromLiDAROptimized(
         groundPoints,
         bounds,
         resolution,
         crs,
-        source
+        source,
+        {
+          onProgress: (percent, message) => {
+            console.log(`[MDT Generation] ${percent}% - ${message}`);
+          }
+        }
       );
       
       if (!result.success || !result.mdt) {

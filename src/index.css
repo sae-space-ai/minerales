@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* CesiumJS styles */
+@import "cesium/Build/Cesium/Widgets/widgets.css";
+
 /* Leaflet fixes for dark theme */
 .leaflet-container {
   background: #1a1a2e !important;

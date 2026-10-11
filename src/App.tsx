@@ -8,6 +8,7 @@ import {
   FileText,
   Layers,
   Bot,
+  Globe,
 } from 'lucide-react';
 import { MissionProvider } from './components/MissionProvider';
 import Dashboard from './components/Dashboard';
@@ -17,9 +18,13 @@ import IntegrationMatrixView from './components/IntegrationMatrixView';
 import ExportPanel from './components/ExportPanel';
 import DocumentationPanel from './components/DocumentationPanel';
 import AIPanel from './components/AIPanel';
+import { lazy, Suspense } from 'react';
 import { useMission } from './lib/store';
 
-type Tab = 'dashboard' | 'map' | 'anomalies' | 'ai' | 'matrix' | 'export' | 'docs';
+// Carga diferida del globo 3D (CesiumJS es pesado)
+const Globe3D = lazy(() => import('./components/Globe3D'));
+
+type Tab = 'dashboard' | 'map' | 'globe' | 'anomalies' | 'ai' | 'matrix' | 'export' | 'docs';
 
 function AppContent() {
   const { state } = useMission();
@@ -33,7 +38,8 @@ function AppContent() {
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'map', label: 'Visor', icon: <Map className="w-4 h-4" /> },
+    { id: 'map', label: 'Visor 2D', icon: <Map className="w-4 h-4" /> },
+    { id: 'globe', label: 'GLOBO 3D', icon: <Globe className="w-4 h-4" /> },
     { id: 'anomalies', label: 'Anomalías', icon: <AlertTriangle className="w-4 h-4" /> },
     { id: 'ai', label: 'MINERAL-AI', icon: <Bot className="w-4 h-4" /> },
     { id: 'matrix', label: 'Integración', icon: <GitBranch className="w-4 h-4" /> },
@@ -120,6 +126,21 @@ function AppContent() {
         {activeTab === 'map' && (
           <div className="h-[calc(100vh-200px)] min-h-[500px]">
             <MapView activeLayers={activeLayers} />
+          </div>
+        )}
+        {activeTab === 'globe' && (
+          <div className="h-[calc(100vh-200px)] min-h-[500px]">
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full bg-gray-900">
+                <div className="text-center">
+                  <div className="text-4xl mb-4 animate-pulse">🌍</div>
+                  <h3 className="text-xl font-bold text-white mb-2">Cargando MINERAL EARTH 3D</h3>
+                  <p className="text-sm text-gray-400">Inicializando motor CesiumJS...</p>
+                </div>
+              </div>
+            }>
+              <Globe3D />
+            </Suspense>
           </div>
         )}
         {activeTab === 'anomalies' && <AnomalyPanel />}

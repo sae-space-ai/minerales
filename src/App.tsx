@@ -45,7 +45,7 @@ function App() {
               <span className="text-2xl">⛏️</span>
               <div>
                 <h1 className="text-lg font-bold text-white leading-tight">MINERAL-01</h1>
-                <p className="text-xs text-gray-500">FireCycle AI × GEOOBS-AI</p>
+                <p className="text-xs text-gray-500">Investigación documental · integraciones pendientes</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -55,7 +55,9 @@ function App() {
                   <button
                     key={key}
                     onClick={() => setActiveLayers((prev) => ({ ...prev, [key]: !value }))}
-                    className={`px-2 py-1 rounded text-xs transition-colors ${
+                    disabled={key !== 'missionArea'}
+                    title={key !== 'missionArea' ? 'Sin datos científicos reales disponibles para esta capa' : 'Mostrar u ocultar la envolvente LAZ'}
+                    className={`px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                       value
                         ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50'
                         : 'bg-gray-800 text-gray-500 border border-gray-700'
@@ -69,7 +71,7 @@ function App() {
               </div>
               <div className="flex items-center gap-2 px-3 py-1.5 bg-red-950/30 border border-red-800/40 rounded-lg">
                 <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                <span className="text-xs text-red-300 font-mono">BLOCKED_RUNTIME</span>
+                <span className="text-xs text-red-300 font-mono">NO CONCLUYENTE</span>
               </div>
             </div>
           </div>
@@ -120,8 +122,8 @@ function App() {
               <span className="text-gray-400">MINERAL-01</span> — Misión geoespacial de investigación de indicios mineros
             </div>
             <div className="flex items-center gap-4">
-              <span>FireCycle AI: pergolessi9-star/firecycle-ai</span>
-              <span>GEOOBS-AI: sae-space-ai/GEOOBS-AI</span>
+              <span>FIRECYCLE: integración pendiente</span>
+              <span>GEOOBS-AI: integración pendiente</span>
             </div>
           </div>
           <div className="mt-2 text-center text-[10px] text-gray-600">

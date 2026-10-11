@@ -71,8 +71,31 @@ export interface LASFileState {
     zMax: number | null;
   };
   pointDensity: number | null;
+  groundPointDensity: number | null;
+  classDistribution: Record<number, number> | null;
+  returnDistribution: Record<number, number> | null;
   dataClassification: DataClassification;
   parseTimestamp: string | null;
+  errorMessage: string | null;
+  processingTimeMs: number | null;
+}
+
+export interface MDTState {
+  filename: string | null;
+  width: number | null;
+  height: number | null;
+  resolution: number | null;
+  bounds: {
+    xMin: number | null;
+    xMax: number | null;
+    yMin: number | null;
+    yMax: number | null;
+  } | null;
+  crs: string | null;
+  noDataValue: number | null;
+  status: ProcessingStatus;
+  dataClassification: DataClassification;
+  timestamp: string | null;
   errorMessage: string | null;
 }
 
@@ -150,6 +173,7 @@ export interface MissionState {
   updatedAt: string;
   mode: 'DEMO' | 'REAL';
   lasFile: LASFileState;
+  mdt: MDTState;
   igme: IGMEQueryState;
   anomalies: Anomaly[];
   coverageGaps: CoverageGap[];
@@ -196,8 +220,25 @@ export const initialMissionState: MissionState = {
       zMax: null,
     },
     pointDensity: null,
+    groundPointDensity: null,
+    classDistribution: null,
+    returnDistribution: null,
     dataClassification: 'PENDING',
     parseTimestamp: null,
+    errorMessage: null,
+    processingTimeMs: null,
+  },
+  mdt: {
+    filename: null,
+    width: null,
+    height: null,
+    resolution: null,
+    bounds: null,
+    crs: null,
+    noDataValue: null,
+    status: 'NOT_STARTED',
+    dataClassification: 'PENDING',
+    timestamp: null,
     errorMessage: null,
   },
   igme: {
@@ -290,6 +331,8 @@ export interface MissionContextType {
   state: MissionState;
   setMode: (mode: 'DEMO' | 'REAL') => void;
   loadLASFile: (file: File) => Promise<void>;
+  processLAZFull: (file: File) => Promise<void>;
+  loadMDT: (file: File) => Promise<void>;
   queryIGME: () => Promise<void>;
   updateThresholds: (thresholds: { minDepth: number; minSlope: number; minArea: number }) => void;
 }

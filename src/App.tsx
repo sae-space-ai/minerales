@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   Layers,
+  Bot,
 } from 'lucide-react';
 import { MissionProvider } from './components/MissionProvider';
 import Dashboard from './components/Dashboard';
@@ -15,9 +16,10 @@ import AnomalyPanel from './components/AnomalyPanel';
 import IntegrationMatrixView from './components/IntegrationMatrixView';
 import ExportPanel from './components/ExportPanel';
 import DocumentationPanel from './components/DocumentationPanel';
+import AIPanel from './components/AIPanel';
 import { useMission } from './lib/store';
 
-type Tab = 'dashboard' | 'map' | 'anomalies' | 'matrix' | 'export' | 'docs';
+type Tab = 'dashboard' | 'map' | 'anomalies' | 'ai' | 'matrix' | 'export' | 'docs';
 
 function AppContent() {
   const { state } = useMission();
@@ -33,6 +35,7 @@ function AppContent() {
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'map', label: 'Visor', icon: <Map className="w-4 h-4" /> },
     { id: 'anomalies', label: 'Anomalías', icon: <AlertTriangle className="w-4 h-4" /> },
+    { id: 'ai', label: 'MINERAL-AI', icon: <Bot className="w-4 h-4" /> },
     { id: 'matrix', label: 'Integración', icon: <GitBranch className="w-4 h-4" /> },
     { id: 'export', label: 'Exportar', icon: <Download className="w-4 h-4" /> },
     { id: 'docs', label: 'Docs', icon: <FileText className="w-4 h-4" /> },
@@ -120,6 +123,7 @@ function AppContent() {
           </div>
         )}
         {activeTab === 'anomalies' && <AnomalyPanel />}
+        {activeTab === 'ai' && <AIPanel />}
         {activeTab === 'matrix' && <IntegrationMatrixView />}
         {activeTab === 'export' && <ExportPanel />}
         {activeTab === 'docs' && <DocumentationPanel />}

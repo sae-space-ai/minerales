@@ -15,13 +15,27 @@ import {
 import { useRef } from 'react';
 
 export default function Dashboard() {
-  const { state, loadLASFile, queryIGME, setMode } = useMission();
+  const { state, loadLASFile, processLAZFull, loadMDT, queryIGME, setMode } = useMission();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mdtInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       loadLASFile(file);
+    }
+  };
+
+  const handleProcessFull = () => {
+    if (fileInputRef.current?.files?.[0]) {
+      processLAZFull(fileInputRef.current.files[0]);
+    }
+  };
+
+  const handleMDTChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      loadMDT(file);
     }
   };
 
@@ -178,6 +192,54 @@ export default function Dashboard() {
           >
             <Upload className="w-4 h-4" />
             Cargar archivo LAS/LAZ
+          </button>
+          {state.lasFile.filename && state.lasFile.status === 'HEADER_ONLY' && (
+            <button
+              onClick={handleProcessFull}
+              className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-900/30 hover:bg-emerald-900/50 border border-emerald-700/50 rounded-lg text-sm text-emerald-300 transition-colors"
+            >
+              <span>⚡</span>
+              Procesar completo (laz-perf)
+            </button>
+          )}
+        </div>
+
+        {/* MDT Status */}
+        <div className="bg-gray-900 rounded-xl p-5 border border-gray-700">
+          <div className="flex items-center gap-2 mb-3">
+            <Server className="w-5 h-5 text-teal-400" />
+            <h3 className="font-semibold text-white">MDT (GeoTIFF)</h3>
+          </div>
+          <div className={`flex items-center gap-2 mb-2 ${statusColors[state.mdt.status]}`}>
+            {statusIcons[state.mdt.status]}
+            <span className="font-mono text-sm">{state.mdt.status}</span>
+          </div>
+          <div className="space-y-1 text-xs text-gray-400">
+            {state.mdt.filename ? (
+              <>
+                <p><span className="text-gray-500">Archivo:</span> {state.mdt.filename}</p>
+                <p><span className="text-gray-500">Dimensiones:</span> {state.mdt.width} × {state.mdt.height}</p>
+                <p><span className="text-gray-500">Resolución:</span> {state.mdt.resolution?.toFixed(2)} m/píxel</p>
+                <p><span className="text-gray-500">CRS:</span> {state.mdt.crs}</p>
+                <p><span className="text-gray-500">NoData:</span> {state.mdt.noDataValue}</p>
+              </>
+            ) : (
+              <p className="text-gray-500">Ningún MDT cargado. Importe GeoTIFF oficial del IGN-CNIG.</p>
+            )}
+          </div>
+          <input
+            ref={mdtInputRef}
+            type="file"
+            accept=".tif,.tiff,.geotiff"
+            onChange={handleMDTChange}
+            className="hidden"
+          />
+          <button
+            onClick={() => mdtInputRef.current?.click()}
+            className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-teal-900/30 hover:bg-teal-900/50 border border-teal-700/50 rounded-lg text-sm text-teal-300 transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Cargar MDT GeoTIFF
           </button>
         </div>
 

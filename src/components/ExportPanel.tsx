@@ -1,5 +1,6 @@
 import { useMission } from '../lib/store';
 import { Download, FileJson, FileSpreadsheet, FileText, CheckCircle2, XCircle } from 'lucide-react';
+import { generateMissionPDF, downloadPDF } from '../lib/pdfGenerator';
 
 export default function ExportPanel() {
   const { state } = useMission();
@@ -18,10 +19,15 @@ export default function ExportPanel() {
     },
     {
       format: 'PDF' as const,
-      available: false,
-      differentiates: { official: false, calculated: false, hypothesis: false, pending: false },
+      available: true,
+      differentiates: { official: true, calculated: true, hypothesis: true, pending: true },
     },
   ];
+
+  const handleExportPDF = () => {
+    const blob = generateMissionPDF(state);
+    downloadPDF(blob, `MINERAL-01_informe_${state.mode.toLowerCase()}_${Date.now()}.pdf`);
+  };
 
   const formatIcons = {
     GeoJSON: <FileJson className="w-5 h-5 text-green-400" />,
@@ -245,11 +251,13 @@ export default function ExportPanel() {
                 Descargar CSV
               </button>
             )}
-            {fmt.format === 'PDF' && (
-              <div className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-500 text-center">
-                <XCircle className="w-4 h-4 inline mr-1" />
-                No implementado — requiere servidor
-              </div>
+            {fmt.format === 'PDF' && fmt.available && (
+              <button
+                onClick={handleExportPDF}
+                className="w-full px-3 py-2 bg-emerald-700/30 hover:bg-emerald-700/50 border border-emerald-600/50 rounded-lg text-sm text-emerald-300 transition-colors"
+              >
+                Descargar PDF
+              </button>
             )}
           </div>
         ))}

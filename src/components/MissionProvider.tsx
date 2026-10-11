@@ -7,6 +7,8 @@ import {
   DEMO_COVERAGE_GAPS,
 } from '../lib/store';
 import { readLASHeader, computeSHA256, computePointDensity } from '../lib/lasReader';
+import { decompressLAZ } from '../lib/lazProcessor';
+import { loadMDTFromFile } from '../lib/mdtProcessor';
 import { queryIGME, queryIGMEViaProxy } from '../lib/igmeClient';
 
 interface MissionProviderProps {
@@ -130,11 +132,15 @@ export function MissionProvider({ children }: MissionProviderProps) {
             zMax: header.zMax,
           },
           pointDensity: density,
+          groundPointDensity: null,
+          classDistribution: null,
+          returnDistribution: null,
           dataClassification: 'SOURCE_VERIFIED',
           parseTimestamp: header.parseTimestamp,
           errorMessage: header.isCompressed
-            ? 'LAZ comprimido: cabecera leída pero puntos no descomprimidos. Requiere laz-perf en servidor.'
+            ? 'LAZ comprimido: cabecera leída. Use "Procesar completo" para descomprimir con laz-perf.'
             : null,
+          processingTimeMs: null,
         },
       }));
     } catch (error) {
@@ -225,12 +231,146 @@ export function MissionProvider({ children }: MissionProviderProps) {
     []
   );
 
+  const processLAZFull = useCallback(async (file: File) => {
+    setState((prev) => ({
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      lasFile: {
+        ...prev.lasFile,
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+      },
+    }));
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const result = await decompressLAZ(buffer, file.name);
+
+      if (!result.success) {
+        setState((prev) => ({
+          ...prev,
+          updatedAt: new Date().toISOString(),
+          lasFile: {
+            ...prev.lasFile,
+            status: 'BLOCKED_RUNTIME',
+            errorMessage: result.errorMessage || 'Error de descompresión',
+            dataClassification: 'FAILED',
+          },
+        }));
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        lasFile: {
+          ...prev.lasFile,
+          status: 'COMPLETED',
+          pointsDecompressed: true,
+          groundClassified: result.groundPointCount > 0,
+          pointCount: result.pointCount,
+          bounds: {
+            xMin: result.bounds.xMin,
+            xMax: result.bounds.xMax,
+            yMin: result.bounds.yMin,
+            yMax: result.bounds.yMax,
+            zMin: result.bounds.zMin,
+            zMax: result.bounds.zMax,
+          },
+          pointDensity: result.density.pointsPerSquareMeter,
+          groundPointDensity: result.density.groundPointsPerSquareMeter,
+          classDistribution: result.classDistribution,
+          returnDistribution: result.returnDistribution,
+          dataClassification: 'SOURCE_VERIFIED',
+          processingTimeMs: result.processingTimeMs,
+          errorMessage: null,
+        },
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        lasFile: {
+          ...prev.lasFile,
+          status: 'FAILED',
+          errorMessage,
+          dataClassification: 'FAILED',
+        },
+      }));
+    }
+  }, []);
+
+  const loadMDT = useCallback(async (file: File) => {
+    setState((prev) => ({
+      ...prev,
+      updatedAt: new Date().toISOString(),
+      mdt: {
+        ...prev.mdt,
+        filename: file.name,
+        status: 'IN_PROGRESS',
+        errorMessage: null,
+      },
+    }));
+
+    try {
+      const result = await loadMDTFromFile(file);
+
+      if (!result.success || !result.mdt) {
+        setState((prev) => ({
+          ...prev,
+          updatedAt: new Date().toISOString(),
+          mdt: {
+            ...prev.mdt,
+            status: 'FAILED',
+            errorMessage: result.errorMessage || 'Error cargando MDT',
+            dataClassification: 'FAILED',
+          },
+        }));
+        return;
+      }
+
+      const mdt = result.mdt;
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          filename: file.name,
+          width: mdt.width,
+          height: mdt.height,
+          resolution: mdt.resolution,
+          bounds: mdt.bounds,
+          crs: mdt.crs,
+          noDataValue: mdt.noDataValue,
+          status: 'COMPLETED',
+          dataClassification: 'SOURCE_VERIFIED',
+          timestamp: mdt.timestamp,
+          errorMessage: null,
+        },
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      setState((prev) => ({
+        ...prev,
+        updatedAt: new Date().toISOString(),
+        mdt: {
+          ...prev.mdt,
+          status: 'FAILED',
+          errorMessage,
+          dataClassification: 'FAILED',
+        },
+      }));
+    }
+  }, []);
+
   return (
     <MissionContext.Provider
       value={{
         state,
         setMode,
         loadLASFile,
+        processLAZFull,
+        loadMDT,
         queryIGME: queryIGMEAction,
         updateThresholds,
       }}

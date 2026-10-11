@@ -1,6 +1,7 @@
 /**
  * Configuración de CesiumJS para MINERAL EARTH 3D.
  * 
+ * CORRECCIÓN FASE 6.1C: Versión actualizada a 1.146.0 para coincidir con package.json
  * Usa CDN público para assets (evita modificar vite.config.js).
  * No requiere Cesium ion token para funcionalidad básica.
  */
@@ -8,8 +9,9 @@
 // Configurar CESIUM_BASE_URL antes de importar Cesium
 export function configureCesium(): void {
   if (typeof window !== 'undefined') {
-    // Usar CDN público de CesiumJS para assets
-    (window as any).CESIUM_BASE_URL = 'https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/';
+    // CORRECCIÓN: Usar versión 1.146.0 para coincidir con package.json
+    // Esto resuelve el problema de teselas violetas causado por discrepancia de versiones
+    (window as any).CESIUM_BASE_URL = 'https://cesium.com/downloads/cesiumjs/releases/1.146/Build/Cesium/';
   }
 }
 

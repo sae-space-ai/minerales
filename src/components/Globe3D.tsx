@@ -269,123 +269,47 @@ export default function Globe3D({ onReady }: Globe3DProps) {
     );
   }
 
+  // CORRECCIÓN FASE 6.1C: Visor 3D limpio sin paneles superpuestos
+  // Los controles se mueven al panel lateral del Command Center
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full bg-gray-950">
+      {/* Contenedor principal de CesiumJS - ocupa todo el espacio disponible */}
       <div ref={containerRef} className="w-full h-full" />
 
+      {/* Overlay de carga - solo visible durante inicialización */}
       {isLoading && (
-        <div className="absolute inset-0 bg-gray-900/90 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center z-50">
           <div className="text-center">
-            <div className="text-4xl mb-4 animate-pulse">🌍</div>
+            <div className="text-5xl mb-4 animate-pulse">🌍</div>
             <h3 className="text-xl font-bold text-white mb-2">Cargando MINERAL EARTH 3D</h3>
             <p className="text-sm text-gray-400">Inicializando motor CesiumJS...</p>
           </div>
         </div>
       )}
 
-      {/* Panel de control de capas (CORRECCIÓN ERROR C: todas implementadas) */}
-      <div className="absolute top-4 right-4 bg-gray-900/95 backdrop-blur-sm rounded-lg p-4 text-xs space-y-2 border border-gray-700 max-w-xs z-10">
-        <h3 className="font-bold text-white text-sm mb-2">Capas</h3>
-        
-        <div className="space-y-1">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={activeLayers.eumetsat}
-              onChange={() => toggleLayer('eumetsat')}
-              className="rounded"
-            />
-            <span className="text-gray-300">EUMETSAT (MSG Dust RGB)</span>
-          </label>
-          
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={activeLayers.ignPnoa}
-              onChange={() => toggleLayer('ignPnoa')}
-              className="rounded"
-            />
-            <span className="text-gray-300">IGN PNOA Ortofoto</span>
-          </label>
-          
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={activeLayers.igmeGeology}
-              onChange={() => toggleLayer('igmeGeology')}
-              className="rounded"
-            />
-            <span className="text-gray-300">IGME Geología</span>
-          </label>
-          
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={activeLayers.terrain}
-              onChange={() => toggleLayer('terrain')}
-              className="rounded"
-            />
-            <span className="text-gray-300">Relieve 3D</span>
-          </label>
-        </div>
-
-        {/* CORRECCIÓN ERROR B: Estado del terreno */}
-        <div className="pt-2 border-t border-gray-700">
-          <div className="text-[10px] text-gray-500">
-            Terreno: <span className={terrainStatus === 'REAL' ? 'text-green-400' : 'text-amber-400'}>
-              {terrainStatus === 'REAL' ? 'RELIEVE REAL' : 'SIN RELIEVE REAL (elipsoide)'}
+      {/* Barra de estado compacta - solo información esencial */}
+      {!isLoading && (
+        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between bg-gray-900/80 backdrop-blur-sm rounded px-3 py-1.5 text-xs border border-gray-700 z-10">
+          <div className="flex items-center gap-4">
+            <span className="text-gray-400">
+              Lat: <span className="text-white font-mono">{cameraInfo.lat.toFixed(4)}°</span>
+            </span>
+            <span className="text-gray-400">
+              Lon: <span className="text-white font-mono">{cameraInfo.lon.toFixed(4)}°</span>
+            </span>
+            <span className="text-gray-400">
+              Alt: <span className="text-white font-mono">{(cameraInfo.height / 1000).toFixed(1)}km</span>
             </span>
           </div>
-          {terrainStatus === 'ELLIPSOID' && activeLayers.terrain && (
-            <div className="text-[10px] text-amber-400/70 mt-1">
-              Se requiere token de Cesium ion para relieve real
-            </div>
-          )}
-        </div>
-
-        <div className="pt-2 border-t border-gray-700">
-          <h4 className="font-semibold text-gray-400 mb-1">Cámara</h4>
-          <div className="text-gray-500 font-mono text-[10px]">
-            <div>Lat: {cameraInfo.lat.toFixed(5)}°</div>
-            <div>Lon: {cameraInfo.lon.toFixed(5)}°</div>
-            <div>Alt: {(cameraInfo.height / 1000).toFixed(2)} km</div>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-0.5 rounded text-[10px] ${
+              terrainStatus === 'REAL' ? 'bg-green-900/40 text-green-300' : 'bg-amber-900/40 text-amber-300'
+            }`}>
+              {terrainStatus === 'REAL' ? '✓ Terreno Real' : '⚠ Elipsoide'}
+            </span>
           </div>
         </div>
-      </div>
-
-      {/* Barra de búsqueda (CORRECCIÓN ERROR F) */}
-      <div className="absolute bottom-4 left-4 right-4 flex gap-2 z-10">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-          placeholder="Buscar coordenadas (lat, lon) o nombre de lugar..."
-          className="flex-1 px-4 py-2 bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-        />
-        <button
-          onClick={handleSearch}
-          className="px-4 py-2 bg-blue-700/40 hover:bg-blue-700/60 border border-blue-600/50 rounded-lg text-sm text-blue-200 transition-colors"
-        >
-          Buscar
-        </button>
-        <button
-          onClick={resetView}
-          className="px-4 py-2 bg-gray-700/40 hover:bg-gray-700/60 border border-gray-600/50 rounded-lg text-sm text-gray-200 transition-colors"
-        >
-          🏠 Inicio
-        </button>
-      </div>
-
-      <div className="absolute top-4 left-4 bg-gray-900/95 backdrop-blur-sm rounded-lg p-3 text-xs border border-gray-700 max-w-sm z-10">
-        <h3 className="font-bold text-white mb-1">MINERAL-01 / DANIELA-MATARRAMA</h3>
-        <p className="text-gray-400 text-[10px]">
-          {PILOT_AREA.name}
-        </p>
-        <p className="text-gray-500 text-[10px] mt-1 italic">
-          {PILOT_AREA.note}
-        </p>
-      </div>
+      )}
     </div>
   );
 }

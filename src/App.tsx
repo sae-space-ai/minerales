@@ -44,32 +44,58 @@ function AppContent() {
     igmeIndicios: false,
   });
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'map', label: 'Visor 2D', icon: <Map className="w-4 h-4" /> },
-    { id: 'globe', label: 'GLOBO 3D', icon: <Globe className="w-4 h-4" /> },
-    { id: 'layers', label: 'Capas', icon: <Library className="w-4 h-4" /> },
-    { id: 'anomalies', label: 'Anomalías', icon: <AlertTriangle className="w-4 h-4" /> },
-    { id: 'ai', label: 'MINERAL-AI', icon: <Bot className="w-4 h-4" /> },
-    { id: 'timeline', label: 'Timeline', icon: <Clock className="w-4 h-4" /> },
-    { id: 'measurements', label: 'Mediciones', icon: <Ruler className="w-4 h-4" /> },
-    { id: 'joule', label: 'JOULE', icon: <Zap className="w-4 h-4" /> },
-    { id: 'matrix', label: 'Integración', icon: <GitBranch className="w-4 h-4" /> },
-    { id: 'export', label: 'Exportar', icon: <Download className="w-4 h-4" /> },
-    { id: 'docs', label: 'Docs', icon: <FileText className="w-4 h-4" /> },
+  // CORRECCIÓN FASE 6.1C: Navegación agrupada por categorías
+  const navigationGroups = [
+    {
+      label: 'INICIO',
+      items: [
+        { id: 'dashboard' as Tab, label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+      ],
+    },
+    {
+      label: 'EXPLORACIÓN',
+      items: [
+        { id: 'map' as Tab, label: 'Visor 2D', icon: <Map className="w-4 h-4" /> },
+        { id: 'globe' as Tab, label: 'Globo 3D', icon: <Globe className="w-4 h-4" /> },
+        { id: 'layers' as Tab, label: 'Capas', icon: <Library className="w-4 h-4" /> },
+      ],
+    },
+    {
+      label: 'INVESTIGACIÓN',
+      items: [
+        { id: 'anomalies' as Tab, label: 'Anomalías', icon: <AlertTriangle className="w-4 h-4" /> },
+        { id: 'ai' as Tab, label: 'MINERAL-AI', icon: <Bot className="w-4 h-4" /> },
+        { id: 'measurements' as Tab, label: 'Mediciones', icon: <Ruler className="w-4 h-4" /> },
+        { id: 'timeline' as Tab, label: 'Timeline', icon: <Clock className="w-4 h-4" /> },
+      ],
+    },
+    {
+      label: 'OPERACIONES',
+      items: [
+        { id: 'joule' as Tab, label: 'JOULE', icon: <Zap className="w-4 h-4" /> },
+        { id: 'matrix' as Tab, label: 'Integración', icon: <GitBranch className="w-4 h-4" /> },
+        { id: 'export' as Tab, label: 'Exportar', icon: <Download className="w-4 h-4" /> },
+      ],
+    },
+    {
+      label: 'SISTEMA',
+      items: [
+        { id: 'docs' as Tab, label: 'Documentación', icon: <FileText className="w-4 h-4" /> },
+      ],
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      {/* Top Bar */}
-      <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
+    <div className="h-screen bg-gray-950 text-gray-100 flex flex-col overflow-hidden">
+      {/* Top Bar - CORRECCIÓN FASE 6.1C: Cabecera compacta */}
+      <header className="bg-gray-900 border-b border-gray-800 flex-shrink-0 z-50">
+        <div className="px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-2xl">⛏️</span>
               <div>
-                <h1 className="text-lg font-bold text-white leading-tight">MINERAL-01</h1>
-                <p className="text-xs text-gray-500">FireCycle AI × GEOOBS-AI — Fase 2</p>
+                <h1 className="text-base font-bold text-white leading-tight">MINERAL-01</h1>
+                <p className="text-[10px] text-gray-500">Command Center v7.3</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -110,77 +136,83 @@ function AppContent() {
         </div>
       </header>
 
-      {/* Navigation */}
+      {/* Navigation - CORRECCIÓN FASE 6.1C: Navegación agrupada y compacta */}
       <nav className="bg-gray-900/50 border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex gap-1 overflow-x-auto py-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
+        <div className="px-4 py-2">
+          <div className="flex gap-1 overflow-x-auto">
+            {navigationGroups.map((group) => (
+              <div key={group.label} className="flex items-center gap-1">
+                <span className="text-[10px] text-gray-500 font-semibold px-2">{group.label}</span>
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+                      activeTab === item.id
+                        ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="hidden sm:inline">{item.label}</span>
+                  </button>
+                ))}
+                <div className="w-px h-6 bg-gray-700 mx-2" />
+              </div>
             ))}
           </div>
         </div>
       </nav>
 
-      {/* Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'map' && (
-          <div className="h-[calc(100vh-200px)] min-h-[500px]">
-            <MapView activeLayers={activeLayers} />
-          </div>
-        )}
-        {activeTab === 'globe' && (
-          <div className="h-[calc(100vh-200px)] min-h-[500px]">
-            <Suspense fallback={
-              <div className="flex items-center justify-center h-full bg-gray-900">
-                <div className="text-center">
-                  <div className="text-4xl mb-4 animate-pulse">🌍</div>
-                  <h3 className="text-xl font-bold text-white mb-2">Cargando MINERAL EARTH 3D</h3>
-                  <p className="text-sm text-gray-400">Inicializando motor CesiumJS...</p>
+      {/* Content - CORRECCIÓN FASE 6.1C: Visores usan todo el ancho, contenido documental limitado */}
+      <main className="flex-1">
+        {/* Visores: usan todo el ancho disponible */}
+        {(activeTab === 'map' || activeTab === 'globe') && (
+          <div className="h-[calc(100vh-140px)] w-full">
+            {activeTab === 'map' && <MapView activeLayers={activeLayers} />}
+            {activeTab === 'globe' && (
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-full bg-gray-900">
+                  <div className="text-center">
+                    <div className="text-4xl mb-4 animate-pulse">🌍</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Cargando MINERAL EARTH 3D</h3>
+                    <p className="text-sm text-gray-400">Inicializando motor CesiumJS...</p>
+                  </div>
                 </div>
-              </div>
-            }>
-              <Globe3D />
-            </Suspense>
+              }>
+                <Globe3D />
+              </Suspense>
+            )}
           </div>
         )}
-        {activeTab === 'anomalies' && <AnomalyPanel />}
-        {activeTab === 'ai' && <AIPanel />}
-        {activeTab === 'timeline' && <TimelinePanel />}
-        {activeTab === 'measurements' && <MeasurementsPanel />}
-        {activeTab === 'layers' && <LayerCatalogPanel />}
-        {activeTab === 'joule' && <JoulePanel />}
-        {activeTab === 'matrix' && <IntegrationMatrixView />}
-        {activeTab === 'export' && <ExportPanel />}
-        {activeTab === 'docs' && <DocumentationPanel />}
+
+        {/* Contenido documental: ancho limitado para legibilidad */}
+        {activeTab !== 'map' && activeTab !== 'globe' && (
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            {activeTab === 'dashboard' && <Dashboard />}
+            {activeTab === 'anomalies' && <AnomalyPanel />}
+            {activeTab === 'ai' && <AIPanel />}
+            {activeTab === 'timeline' && <TimelinePanel />}
+            {activeTab === 'measurements' && <MeasurementsPanel />}
+            {activeTab === 'layers' && <LayerCatalogPanel />}
+            {activeTab === 'joule' && <JoulePanel />}
+            {activeTab === 'matrix' && <IntegrationMatrixView />}
+            {activeTab === 'export' && <ExportPanel />}
+            {activeTab === 'docs' && <DocumentationPanel />}
+          </div>
+        )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 border-t border-gray-800 py-4 mt-8">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-gray-500">
-            <div>
-              <span className="text-gray-400">MINERAL-01</span> — Misión geoespacial de investigación de indicios mineros
-            </div>
-            <div className="flex items-center gap-4">
-              <span>FireCycle AI: pergolessi9-star/firecycle-ai</span>
-              <span>GEOOBS-AI: sae-space-ai/GEOOBS-AI</span>
-            </div>
+      {/* Status Bar - CORRECCIÓN FASE 6.1C: Barra de estado compacta en lugar de footer */}
+      <footer className="bg-gray-900 border-t border-gray-800 flex-shrink-0 z-40">
+        <div className="px-4 py-1.5 flex items-center justify-between text-[10px] text-gray-500">
+          <div className="flex items-center gap-4">
+            <span>MINERAL-01 Command Center</span>
+            <span className="text-gray-600">|</span>
+            <span>v7.3</span>
           </div>
-          <div className="mt-2 text-center text-[10px] text-gray-600">
-            Los límites catastrales no acreditan titularidad. La morfología no prueba actividad extractiva.
-            Revisión humana requerida para toda conclusión.
+          <div className="flex items-center gap-4">
+            <span className="text-gray-600">Los límites catastrales no acreditan titularidad</span>
           </div>
         </div>
       </footer>

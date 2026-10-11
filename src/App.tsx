@@ -12,6 +12,7 @@ import {
   Clock,
   Ruler,
   Zap,
+  Library,
 } from 'lucide-react';
 import { MissionProvider } from './components/MissionProvider';
 import Dashboard from './components/Dashboard';
@@ -24,13 +25,14 @@ import AIPanel from './components/AIPanel';
 import TimelinePanel from './components/TimelinePanel';
 import MeasurementsPanel from './components/MeasurementsPanel';
 import JoulePanel from './components/JoulePanel';
+import LayerCatalogPanel from './components/LayerCatalogPanel';
 import { lazy, Suspense } from 'react';
 import { useMission } from './lib/store';
 
 // Carga diferida del globo 3D (CesiumJS es pesado)
 const Globe3D = lazy(() => import('./components/Globe3D'));
 
-type Tab = 'dashboard' | 'map' | 'globe' | 'anomalies' | 'ai' | 'timeline' | 'measurements' | 'joule' | 'matrix' | 'export' | 'docs';
+type Tab = 'dashboard' | 'map' | 'globe' | 'anomalies' | 'ai' | 'timeline' | 'measurements' | 'layers' | 'joule' | 'matrix' | 'export' | 'docs';
 
 function AppContent() {
   const { state } = useMission();
@@ -46,6 +48,7 @@ function AppContent() {
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'map', label: 'Visor 2D', icon: <Map className="w-4 h-4" /> },
     { id: 'globe', label: 'GLOBO 3D', icon: <Globe className="w-4 h-4" /> },
+    { id: 'layers', label: 'Capas', icon: <Library className="w-4 h-4" /> },
     { id: 'anomalies', label: 'Anomalías', icon: <AlertTriangle className="w-4 h-4" /> },
     { id: 'ai', label: 'MINERAL-AI', icon: <Bot className="w-4 h-4" /> },
     { id: 'timeline', label: 'Timeline', icon: <Clock className="w-4 h-4" /> },
@@ -156,6 +159,7 @@ function AppContent() {
         {activeTab === 'ai' && <AIPanel />}
         {activeTab === 'timeline' && <TimelinePanel />}
         {activeTab === 'measurements' && <MeasurementsPanel />}
+        {activeTab === 'layers' && <LayerCatalogPanel />}
         {activeTab === 'joule' && <JoulePanel />}
         {activeTab === 'matrix' && <IntegrationMatrixView />}
         {activeTab === 'export' && <ExportPanel />}

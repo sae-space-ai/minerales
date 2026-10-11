@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { missionData, MISSION_AREA } from '../data/missionData';
+import { MISSION_AREA } from '../data/missionData';
 
-interface MapViewProps {
+interface Props {
   activeLayers: {
     anomalies: boolean;
     coverageGaps: boolean;
@@ -10,125 +10,73 @@ interface MapViewProps {
     igmeIndicios: boolean;
   };
 }
+type GroupKey = keyof Props['activeLayers'];
 
-export default function MapView({ activeLayers }: MapViewProps) {
+export default function MapView({ activeLayers }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [mapReady, setMapReady] = useState(false);
+  const groupsRef = useRef<Record<GroupKey, L.LayerGroup> | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
-
-    const map = L.map(mapContainerRef.current, {
-      center: MISSION_AREA.center,
-      zoom: 14,
-      zoomControl: true,
-    });
-
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { center: MISSION_AREA.center, zoom: 13 });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19,
+      maxZoom: 19, attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Mission area bounds
-    const boundsRect = L.rectangle(
-      [
-        [MISSION_AREA.bounds.sw[0], MISSION_AREA.bounds.sw[1]],
-        [MISSION_AREA.bounds.ne[0], MISSION_AREA.bounds.ne[1]],
-      ],
-      { color: '#3b82f6', weight: 2, fillOpacity: 0.05, dashArray: '5,5' }
-    );
-    boundsRect.bindPopup('<b>Área de trabajo MINERAL-01</b><br/>Cortijo de Daniela, Arroyo de Matarrama<br/>TM Montemolín (Badajoz)');
-    boundsRect.addTo(map);
+    const groups: Record<GroupKey,L.LayerGroup> = {
+      missionArea:L.layerGroup(),
+      anomalies:L.layerGroup(),
+      coverageGaps:L.layerGroup(),
+      igmeIndicios:L.layerGroup(),
+    };
 
-    // Anomalies
-    missionData.anomalies.forEach((anomaly) => {
-      if (anomaly.geometry.type === 'Polygon') {
-        const coords = (anomaly.geometry as GeoJSON.Polygon).coordinates[0].map(
-          (c) => [c[1], c[0]] as [number, number]
-        );
-        const color = anomaly.evidenceLevel === 'TOPOGRAPHIC_OBS' ? '#f59e0b' :
-                     anomaly.evidenceLevel === 'HUMAN_ACTIVITY_HYPOTHESIS' ? '#ef4444' : '#8b5cf6';
-        const polygon = L.polygon(coords, {
-          color,
-          weight: 2,
-          fillOpacity: 0.2,
-        });
-        polygon.bindPopup(`
-          <div style="min-width:200px">
-            <b>${anomaly.id}</b><br/>
-            <span style="color:${color}">● ${anomaly.evidenceLevel.replace(/_/g, ' ')}</span><br/>
-            <b>Dimensiones:</b> ${anomaly.dimensions.length}m × ${anomaly.dimensions.width}m × ${anomaly.dimensions.depth}m<br/>
-            <b>Elevación:</b> ${anomaly.elevation}m<br/>
-            <b>Metodología:</b> ${anomaly.methodology}<br/>
-            <b>Confianza:</b> ${(anomaly.confidence * 100).toFixed(0)}%<br/>
-            <b>IGME:</b> ${anomaly.igmeRecord}<br/>
-            <b>Confirmada:</b> ${anomaly.confirmed ? 'SÍ' : 'NO — requiere revisión humana'}<br/>
-            <hr/><i>${anomaly.alternativeInterpretations.join('; ')}</i>
-          </div>
-        `);
-        polygon.addTo(map);
-      }
-    });
+    // La envolvente se calcula SOLO a partir de la cabecera LAZ; no define una finca.
+    const coords = MISSION_AREA.verifiedLasEnvelope.map(([lon, lat]) => [lat, lon] as [number,number]);
+    L.polygon(coords, { color:'#60a5fa', fillOpacity:0.08, weight:2, dashArray:'6,4' })
+      .bindPopup('<b>Envolvente de CABECERA LAZ 2024 AND 757-4211</b><p>EPSG:25829, transformada para visualización. Cobertura individual de puntos NO comprobada. No equivale al cortijo.</p>')
+      .addTo(groups.missionArea);
 
-    // Coverage gaps
-    missionData.coverageGaps.forEach((gap) => {
-      const coords = (gap.geometry as GeoJSON.Polygon).coordinates[0].map(
-        (c) => [c[1], c[0]] as [number, number]
-      );
-      const gapRect = L.polygon(coords, {
-        color: '#6b7280',
-        weight: 1,
-        fillOpacity: 0.15,
-        dashArray: '3,3',
-      });
-      gapRect.bindPopup(`<b>HUECO: ${gap.id}</b><br/>${gap.reason}<br/>Severidad: ${gap.severity}`);
-      gapRect.addTo(map);
-    });
-
-    // Center marker
-    L.marker(MISSION_AREA.center)
-      .bindPopup('<b>Punto de referencia</b><br/>Área de investigación MINERAL-01')
+    L.circleMarker(MISSION_AREA.center, {
+      radius:7, color:'#fbbf24', fillColor:'#f59e0b', fillOpacity:0.8, weight:2,
+    }).bindPopup('<b>Referencia provisional del arroyo Matarrama</b><p>38.01250, -6.06628. NO es la posición verificada del Cortijo de Daniela.</p>')
       .addTo(map);
 
+    const envBounds = L.latLngBounds(coords);
+    envBounds.extend(MISSION_AREA.center);
+    map.fitBounds(envBounds.pad(0.2), { maxZoom: 15 });
     mapRef.current = map;
-    setMapReady(true);
-
+    groupsRef.current = groups;
+    setReady(true);
     return () => {
       map.remove();
-      mapRef.current = null;
+      mapRef.current=null;
+      groupsRef.current=null;
     };
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current || !mapReady) return;
-    // Layer visibility could be controlled here
-  }, [activeLayers, mapReady]);
+    if (!ready || !mapRef.current || !groupsRef.current) return;
+    const map=mapRef.current, groups=groupsRef.current;
+    (Object.keys(groups) as GroupKey[]).forEach((key) => {
+      if (activeLayers[key]) {
+        if (!map.hasLayer(groups[key])) groups[key].addTo(map);
+      } else if (map.hasLayer(groups[key])) map.removeLayer(groups[key]);
+    });
+  }, [activeLayers, ready]);
 
   return (
-    <div className="relative w-full h-full rounded-lg overflow-hidden border border-gray-700">
-      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: '500px' }} />
-      <div className="absolute top-3 right-3 z-[1000] bg-gray-900/90 backdrop-blur-sm rounded-lg p-3 text-xs space-y-1 border border-gray-700">
-        <div className="font-bold text-blue-400 mb-2">Capas activas</div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded bg-blue-500/30 border border-blue-500 inline-block"></span>
-          <span>Área de trabajo</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded bg-amber-500/30 border border-amber-500 inline-block"></span>
-          <span>Anomalías topográficas</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded bg-red-500/30 border border-red-500 inline-block"></span>
-          <span>Hipótesis actividad humana</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded bg-gray-500/30 border border-gray-500 inline-block border-dashed"></span>
-          <span>Huecos de cobertura</span>
-        </div>
+    <div className="relative w-full h-full overflow-hidden rounded-lg border border-gray-700">
+      <div ref={containerRef} className="h-full w-full" style={{ minHeight:500 }}/>
+      <div className="absolute right-3 top-3 z-[1000] max-w-[250px] rounded-lg border border-gray-700 bg-gray-900/95 p-3 text-xs">
+        <strong className="text-blue-300">Lectura científica del mapa</strong>
+        <p className="mt-1">Azul: envolvente del LAZ comprobado por cabecera.</p>
+        <p className="mt-1">Amarillo: punto provisional del arroyo; no es el cortijo.</p>
+        <p className="mt-1 text-amber-300">Anomalías, huecos e indicios IGME: sin geometrías verificadas que mostrar.</p>
       </div>
-      <div className="absolute bottom-3 left-3 z-[1000] bg-gray-900/90 backdrop-blur-sm rounded px-2 py-1 text-xs text-gray-400 border border-gray-700">
-        CRS: ETRS89 / UTM 30N (EPSG:25830) | Tile: OSM
+      <div className="absolute bottom-3 left-3 z-[1000] rounded border border-gray-700 bg-gray-900/95 px-2 py-1 text-xs text-gray-300">
+        Mapa OSM (EPSG:3857). LAZ fuente: ETRS89 / UTM 29N (EPSG:25829).
       </div>
     </div>
   );

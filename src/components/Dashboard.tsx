@@ -106,7 +106,7 @@ export default function Dashboard() {
             <p className="text-[10px] break-all text-gray-500 font-mono">{mission.igmeStatus.endpoint}</p>
             <p className="mt-2"><span className="text-gray-500">Estado:</span></p>
             <p className="text-amber-400/80 italic">{mission.igmeStatus.errorMessage}</p>
-            <p className="mt-1"><span className="text-gray-500">Indicios:</span> <span className="text-red-400 font-bold">No se devuelve 0 (consulta fallida)</span></p>
+            <p className="mt-1"><span className="text-gray-500">Indicios:</span> <span className="text-amber-300 font-bold">NO CONSULTADOS — recuento desconocido</span></p>
           </div>
         </div>
 
@@ -123,9 +123,9 @@ export default function Dashboard() {
           <div className="space-y-1 text-xs text-gray-400">
             <p className="text-red-400/80">
               <AlertTriangle className="w-3 h-3 inline mr-1" />
-              Clasificación Ground no ejecutada.
+              Clasificación de retornos Ground no ejecutada sobre este LAZ.
             </p>
-            <p>Sin MDT real generado. Sin hillshade. Sin pendiente.</p>
+            <p>Sin MDT real procesado. Sin hillshade ni pendientes calculadas para esta zona.</p>
             <p className="mt-2 text-gray-500">
               Requiere: librería LAZ en servidor (laz-perf / laszip) o microservicio aislado.
               No se exigen estadísticas inventadas.
@@ -181,14 +181,14 @@ export default function Dashboard() {
                 </div>
                 <p className="text-xs text-gray-400">{pattern.description}</p>
                 <p className="text-xs text-amber-400/70 mt-1 italic">⚠️ {pattern.caveat}</p>
-                <p className="text-xs text-gray-500 mt-1">Detectados: {pattern.detected}</p>
+                <p className="text-xs text-gray-500 mt-1">Resultado: {pattern.detected === null ? 'NO EVALUADO' : pattern.detected}</p>
               </div>
             );
           })}
         </div>
 
         <div className="mt-4 text-xs text-gray-500">
-          <span className="text-gray-400">Umbrales configurados:</span> profundidad mín. {mission.geomorphologicalEvaluation.thresholds.minDepth}m |
+          <span className="text-gray-400">Umbrales metodológicos propuestos; NO ejecutados:</span> profundidad mín. {mission.geomorphologicalEvaluation.thresholds.minDepth}m |
           pendiente mín. {mission.geomorphologicalEvaluation.thresholds.minSlope}° |
           área mín. {mission.geomorphologicalEvaluation.thresholds.minArea}m²
         </div>

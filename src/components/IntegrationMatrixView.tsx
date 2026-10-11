@@ -28,8 +28,8 @@ export default function IntegrationMatrixView() {
       </div>
 
       <p className="text-sm text-gray-400">
-        Funciones existentes y nuevas en los repositorios involucrados. Solo se listan funciones verificadas en la estructura real.
-        No se suponen rutas que no existan.
+        Inventario declarativo de componentes e integraciones propuestas. Solo las rutas de frontend inspeccionadas aquí se han comprobado; los enlaces efectivos con FIRECYCLE y GEOOBS-AI siguen pendientes.
+        Las etiquetas IMPLEMENTED, PARTIAL o BLOCKED indican alcance documentado, no pruebas de ejecución científica.
       </p>
 
       {integrationMatrix.map((repo) => (

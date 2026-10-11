@@ -1,184 +1,91 @@
-import { exportFormats, missionData } from '../data/missionData';
-import { Download, FileJson, FileSpreadsheet, FileText, CheckCircle2, XCircle } from 'lucide-react';
+import { missionData, MISSION_AREA } from '../data/missionData';
+import { Download, FileJson, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+
+function downloadFile(name:string, mime:string, contents:string) {
+  const blob=new Blob([contents],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 
 export default function ExportPanel() {
-  const formatIcons = {
-    GeoJSON: <FileJson className="w-5 h-5 text-green-400" />,
-    CSV: <FileSpreadsheet className="w-5 h-5 text-blue-400" />,
-    PDF: <FileText className="w-5 h-5 text-red-400" />,
+  const downloadGeojson=()=>{
+    // GeoJSON RFC 7946 requires WGS84 lon/lat. No inferred mine/anomaly geometries.
+    const data={
+      type:'FeatureCollection',
+      metadata:{
+        mission:'MINERAL-01',
+        scientific_state:'NO_CONCLUSIVE',
+        coordinate_system:'OGC CRS84 (WGS84 lon/lat)',
+        warning:'Solo geometría de envolvente de cabecera y punto provisional de arroyo. No es límite de finca ni inventario minero.',
+        verified_mining_findings:null,
+        detected_anomalies:null,
+        source_laz:missionData.lasStatus.filename,
+        original_source_crs:missionData.lasStatus.crsEPSG,
+      },
+      features:[
+        {type:'Feature',id:'LAZ_HEADER_ENVELOPE',
+          geometry:{type:'Polygon',coordinates:[MISSION_AREA.verifiedLasEnvelope]},
+          properties:{
+            category:'ENVELOPE_FROM_LAS_HEADER',
+            source_file:missionData.lasStatus.filename,
+            source_crs:missionData.lasStatus.crsEPSG,
+            points_declared:missionData.lasStatus.pointCount,
+            actual_lidar_coverage_verified:false,
+            mining_evidence:false,
+          }},
+        {type:'Feature',id:'STREAM_REFERENCE_PROVISIONAL',
+          geometry:{type:'Point',coordinates:[MISSION_AREA.center[1],MISSION_AREA.center[0]]},
+          properties:{category:'PROVISIONAL_STREAM_REFERENCE',verified_as_cortijo:false,mining_evidence:false}}
+      ]
+    };
+    downloadFile('MINERAL01_metadatos_cobertura_NO_ANOMALIAS.geojson','application/geo+json',JSON.stringify(data,null,2));
+  };
+  const downloadCsv=()=>{
+    const rows=[
+      ['campo','valor','estado_evidencia'],
+      ['mision',missionData.id,'IDENTIFICADOR'],
+      ['referencia_geografica','Punto provisional del arroyo Matarrama','NO_VERIFICADO_COMO_CORTIJO'],
+      ['latitud_referencia',String(MISSION_AREA.center[0]),'PROVISIONAL'],
+      ['longitud_referencia',String(MISSION_AREA.center[1]),'PROVISIONAL'],
+      ['archivo_laz',missionData.lasStatus.filename,'CABECERA_VERIFICADA'],
+      ['puntos_declarados',String(missionData.lasStatus.pointCount),'CABECERA_NO_DESCOMPRIMIDO'],
+      ['crs_archivo',missionData.lasStatus.crsEPSG,'CABECERA'],
+      ['puntos_ground_procesados','NO','NO_EJECUTADO'],
+      ['mdt_real_analizado','NO','NO_EJECUTADO'],
+      ['anomalías_evaluadas','NO','NO_EVALUADO_NO_EQUIVALE_A_CERO'],
+      ['consulta_igme',missionData.igmeStatus.status,'RECUENTO_DESCONOCIDO'],
+      ['hallazgos_mineros_confirmados','NO_EVALUADO','NO_CONCLUYENTE'],
+    ];
+    const csv=rows.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');
+    downloadFile('MINERAL01_estado_evidencias.csv','text/csv;charset=utf-8','\uFEFF'+csv);
   };
 
-  const handleExport = (format: string) => {
-    if (format === 'GeoJSON') {
-      const geojson = {
-        type: 'FeatureCollection',
-        features: missionData.anomalies.map((a) => ({
-          type: 'Feature',
-          id: a.id,
-          geometry: a.geometry,
-          properties: {
-            dimensions: a.dimensions,
-            elevation: a.elevation,
-            sourceFile: a.sourceFile,
-            methodology: a.methodology,
-            sourceFingerprint: a.sourceFingerprint,
-            evidenceLevel: a.evidenceLevel,
-            alternativeInterpretations: a.alternativeInterpretations,
-            distanceToChannel: a.distanceToChannel,
-            igmeRecord: a.igmeRecord,
-            confidence: a.confidence,
-            confirmed: a.confirmed,
-            // Diferenciación de datos
-            dataClassification: {
-              official: a.igmeRecord === 'VERIFIED',
-              calculated: ['TOPOGRAPHIC_OBS'].includes(a.evidenceLevel),
-              hypothesis: ['HUMAN_ACTIVITY_HYPOTHESIS'].includes(a.evidenceLevel),
-              pending: !a.confirmed,
-            },
-          },
-        })),
-      };
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'MINERAL-01_anomalies.geojson';
-      link.click();
-      URL.revokeObjectURL(url);
-    } else if (format === 'CSV') {
-      const headers = ['id', 'evidenceLevel', 'dimensions_l', 'dimensions_w', 'dimensions_d', 'elevation', 'methodology', 'confidence', 'igmeRecord', 'confirmed', 'data_official', 'data_calculated', 'data_hypothesis', 'data_pending'];
-      const rows = missionData.anomalies.map((a) => [
-        a.id,
-        a.evidenceLevel,
-        a.dimensions.length,
-        a.dimensions.width,
-        a.dimensions.depth,
-        a.elevation,
-        `"${a.methodology}"`,
-        a.confidence,
-        a.igmeRecord,
-        a.confirmed,
-        a.igmeRecord === 'VERIFIED',
-        a.evidenceLevel === 'TOPOGRAPHIC_OBS',
-        a.evidenceLevel === 'HUMAN_ACTIVITY_HYPOTHESIS',
-        !a.confirmed,
-      ]);
-      const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'MINERAL-01_anomalies.csv';
-      link.click();
-      URL.revokeObjectURL(url);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Download className="w-5 h-5 text-emerald-400" />
-        <h2 className="text-xl font-bold text-white">Exportación de Datos</h2>
+  return <div className="space-y-6">
+    <h2 className="flex items-center gap-2 text-xl font-bold"><Download className="h-5 w-5 text-cyan-400"/>Exportación de evidencias disponibles</h2>
+    <div className="rounded-lg border border-amber-800/40 bg-amber-950/20 p-4 text-sm text-amber-200">
+      <div className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4"/>No existen anomalías mineras verificadas para exportar</div>
+      <p className="mt-2">Los archivos disponibles contienen únicamente metadatos comprobados y geometría de referencia provisional. No contienen excavaciones, minas, zanjas detectadas ni un recuento científico de anomalías.</p>
+    </div>
+    <div className="grid gap-4 md:grid-cols-3">
+      <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+        <FileJson className="mb-2 h-6 w-6 text-sky-300"/>
+        <h3 className="font-semibold">GeoJSON de referencia</h3>
+        <p className="my-3 text-sm text-gray-400">Envolvente de cabecera LAZ y punto provisional, identificados expresamente como tales.</p>
+        <button onClick={downloadGeojson} className="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600">Descargar GeoJSON</button>
       </div>
-
-      <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-lg p-4">
-        <p className="text-xs text-emerald-300/80">
-          Cada exportación diferencia explícitamente entre: <strong>dato oficial</strong> (fuentes verificadas),
-          <strong> dato calculado</strong> (procesamiento automático), <strong>hipótesis</strong> (interpretación no verificada),
-          y <strong>dato pendiente</strong> (requiere validación adicional).
-        </p>
+      <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+        <FileSpreadsheet className="mb-2 h-6 w-6 text-emerald-300"/>
+        <h3 className="font-semibold">CSV de estado</h3>
+        <p className="my-3 text-sm text-gray-400">Estado verificable de fuentes, datos pendientes y ausencia de análisis ejecutado.</p>
+        <button onClick={downloadCsv} className="rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600">Descargar CSV</button>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {exportFormats.map((fmt) => (
-          <div key={fmt.format} className="bg-gray-900 rounded-xl p-5 border border-gray-700">
-            <div className="flex items-center gap-3 mb-3">
-              {formatIcons[fmt.format]}
-              <span className="font-semibold text-white">{fmt.format}</span>
-              {fmt.available ? (
-                <CheckCircle2 className="w-4 h-4 text-green-400 ml-auto" />
-              ) : (
-                <XCircle className="w-4 h-4 text-red-400 ml-auto" />
-              )}
-            </div>
-
-            <div className="space-y-2 mb-4">
-              <div className="text-[10px] text-gray-500 uppercase">Diferenciación de datos</div>
-              <div className="grid grid-cols-2 gap-1">
-                <div className="flex items-center gap-1">
-                  {fmt.differentiates.official ? (
-                    <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  ) : (
-                    <XCircle className="w-3 h-3 text-red-400" />
-                  )}
-                  <span className="text-xs text-gray-400">Oficial</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {fmt.differentiates.calculated ? (
-                    <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  ) : (
-                    <XCircle className="w-3 h-3 text-red-400" />
-                  )}
-                  <span className="text-xs text-gray-400">Calculado</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {fmt.differentiates.hypothesis ? (
-                    <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  ) : (
-                    <XCircle className="w-3 h-3 text-red-400" />
-                  )}
-                  <span className="text-xs text-gray-400">Hipótesis</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {fmt.differentiates.pending ? (
-                    <CheckCircle2 className="w-3 h-3 text-green-400" />
-                  ) : (
-                    <XCircle className="w-3 h-3 text-red-400" />
-                  )}
-                  <span className="text-xs text-gray-400">Pendiente</span>
-                </div>
-              </div>
-            </div>
-
-            {fmt.available && fmt.format !== 'PDF' && (
-              <button
-                onClick={() => handleExport(fmt.format)}
-                className="w-full px-3 py-2 bg-emerald-700/30 hover:bg-emerald-700/50 border border-emerald-600/50 rounded-lg text-sm text-emerald-300 transition-colors"
-              >
-                Descargar {fmt.format}
-              </button>
-            )}
-            {fmt.format === 'PDF' && (
-              <div className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-500 text-center">
-                Requiere servidor (no en navegador)
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Data Provenance */}
-      <div className="bg-gray-900 rounded-xl p-5 border border-gray-700">
-        <h3 className="font-semibold text-white mb-3">Procedencia de cada afirmación</h3>
-        <div className="space-y-2 text-xs">
-          <div className="flex items-start gap-2 p-2 bg-gray-800/50 rounded">
-            <span className="text-green-400 font-mono min-w-[120px]">LAS HEADER</span>
-            <span className="text-gray-400">Cabecera del archivo LAZ PNOA. Verificado con checksum SHA-256. Origen: CNIG.</span>
-          </div>
-          <div className="flex items-start gap-2 p-2 bg-gray-800/50 rounded">
-            <span className="text-amber-400 font-mono min-w-[120px]">ANOMALÍAS</span>
-            <span className="text-gray-400">Calculadas a partir de MDT interpolado. NO son datos oficiales. Nivel: observación topográfica o hipótesis.</span>
-          </div>
-          <div className="flex items-start gap-2 p-2 bg-gray-800/50 rounded">
-            <span className="text-red-400 font-mono min-w-[120px]">IGME</span>
-            <span className="text-gray-400">Consulta fallida (CORS). No se registran 0 indicios. Estado: QUERY_FAILED.</span>
-          </div>
-          <div className="flex items-start gap-2 p-2 bg-gray-800/50 rounded">
-            <span className="text-purple-400 font-mono min-w-[120px]">GEOMORFOL.</span>
-            <span className="text-gray-400">Evaluación basada en patrones topográficos. No confirma actividad minera. Requiere revisión humana.</span>
-          </div>
-        </div>
+      <div className="rounded-xl border border-gray-700 bg-gray-900 p-5">
+        <h3 className="font-semibold">Informe científico PDF</h3>
+        <p className="my-3 text-sm text-gray-400">No disponible: faltan resultados geológicos y contraste con el MDT y el IGME.</p>
+        <span className="text-xs text-amber-300">No habilitado</span>
       </div>
     </div>
-  );
+  </div>;
 }

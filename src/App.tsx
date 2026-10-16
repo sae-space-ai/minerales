@@ -1,4 +1,10 @@
-import { useState } from 'react';
+/**
+ * MINERAL-01 - App Principal
+ * 
+ * FASE 6.1D: Integración con AppShell y paneles acoplables
+ */
+
+import { useState, useRef } from 'react';
 import {
   LayoutDashboard,
   Map,
@@ -6,7 +12,6 @@ import {
   GitBranch,
   Download,
   FileText,
-  Layers,
   Bot,
   Globe,
   Clock,
@@ -15,8 +20,12 @@ import {
   Library,
 } from 'lucide-react';
 import { MissionProvider } from './components/MissionProvider';
+import { useMission } from './lib/store';
+import { AppShell } from './components/AppShell';
 import Dashboard from './components/Dashboard';
 import MapView from './components/MapView';
+import Globe3D, { Globe3DHandle } from './components/Globe3D';
+import GlobeControlsPanel from './components/GlobeControlsPanel';
 import AnomalyPanel from './components/AnomalyPanel';
 import IntegrationMatrixView from './components/IntegrationMatrixView';
 import ExportPanel from './components/ExportPanel';
@@ -27,16 +36,14 @@ import MeasurementsPanel from './components/MeasurementsPanel';
 import JoulePanel from './components/JoulePanel';
 import LayerCatalogPanel from './components/LayerCatalogPanel';
 import { lazy, Suspense } from 'react';
-import { useMission } from './lib/store';
-
-// Carga diferida del globo 3D (CesiumJS es pesado)
-const Globe3D = lazy(() => import('./components/Globe3D'));
 
 type Tab = 'dashboard' | 'map' | 'globe' | 'anomalies' | 'ai' | 'timeline' | 'measurements' | 'layers' | 'joule' | 'matrix' | 'export' | 'docs';
 
 function AppContent() {
   const { state } = useMission();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const globeRef = useRef<Globe3DHandle>(null);
+  
   const [activeLayers, setActiveLayers] = useState({
     anomalies: true,
     coverageGaps: true,
@@ -44,7 +51,7 @@ function AppContent() {
     igmeIndicios: false,
   });
 
-  // CORRECCIÓN FASE 6.1C: Navegación agrupada por categorías
+  // Navegación agrupada
   const navigationGroups = [
     {
       label: 'INICIO',
@@ -85,138 +92,97 @@ function AppContent() {
     },
   ];
 
-  return (
-    <div className="h-screen bg-gray-950 text-gray-100 flex flex-col overflow-hidden">
-      {/* Top Bar - CORRECCIÓN FASE 6.1C: Cabecera compacta */}
-      <header className="bg-gray-900 border-b border-gray-800 flex-shrink-0 z-50">
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⛏️</span>
-              <div>
-                <h1 className="text-base font-bold text-white leading-tight">MINERAL-01</h1>
-                <p className="text-[10px] text-gray-500">Command Center v7.3</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2">
-                <Layers className="w-4 h-4 text-gray-500" />
-                {Object.entries(activeLayers).map(([key, value]) => (
-                  <button
-                    key={key}
-                    onClick={() => setActiveLayers((prev) => ({ ...prev, [key]: !value }))}
-                    className={`px-2 py-1 rounded text-xs transition-colors ${
-                      value
-                        ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50'
-                        : 'bg-gray-800 text-gray-500 border border-gray-700'
-                    }`}
-                  >
-                    {key === 'anomalies' ? 'Anomalías' :
-                     key === 'coverageGaps' ? 'Huecos' :
-                     key === 'missionArea' ? 'Área' : 'IGME'}
-                  </button>
-                ))}
-              </div>
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
-                state.mode === 'REAL'
-                  ? 'bg-green-950/30 border-green-800/40'
-                  : 'bg-amber-950/30 border-amber-800/40'
-              }`}>
-                <div className={`w-2 h-2 rounded-full animate-pulse ${
-                  state.mode === 'REAL' ? 'bg-green-400' : 'bg-amber-400'
-                }`}></div>
-                <span className={`text-xs font-mono ${
-                  state.mode === 'REAL' ? 'text-green-300' : 'text-amber-300'
-                }`}>
-                  {state.mode === 'REAL' ? 'REAL' : 'DEMO'}
-                </span>
-              </div>
-            </div>
+  // Panel de navegación lateral
+  const navigation = (
+    <nav className="p-2">
+      {navigationGroups.map((group) => (
+        <div key={group.label} className="mb-4">
+          <div className="text-[10px] text-gray-500 font-semibold px-3 py-1 uppercase tracking-wider">
+            {group.label}
           </div>
-        </div>
-      </header>
-
-      {/* Navigation - CORRECCIÓN FASE 6.1C: Navegación agrupada y compacta */}
-      <nav className="bg-gray-900/50 border-b border-gray-800">
-        <div className="px-4 py-2">
-          <div className="flex gap-1 overflow-x-auto">
-            {navigationGroups.map((group) => (
-              <div key={group.label} className="flex items-center gap-1">
-                <span className="text-[10px] text-gray-500 font-semibold px-2">{group.label}</span>
-                {group.items.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-                      activeTab === item.id
-                        ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50'
-                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                    }`}
-                  >
-                    {item.icon}
-                    <span className="hidden sm:inline">{item.label}</span>
-                  </button>
-                ))}
-                <div className="w-px h-6 bg-gray-700 mx-2" />
-              </div>
+          <div className="space-y-0.5">
+            {group.items.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                  activeTab === item.id
+                    ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                }`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
             ))}
           </div>
         </div>
-      </nav>
+      ))}
+    </nav>
+  );
 
-      {/* Content - CORRECCIÓN FASE 6.1C: Visores usan todo el ancho, contenido documental limitado */}
-      <main className="flex-1">
-        {/* Visores: usan todo el ancho disponible */}
-        {(activeTab === 'map' || activeTab === 'globe') && (
-          <div className="h-[calc(100vh-140px)] w-full">
-            {activeTab === 'map' && <MapView activeLayers={activeLayers} />}
-            {activeTab === 'globe' && (
-              <Suspense fallback={
-                <div className="flex items-center justify-center h-full bg-gray-900">
-                  <div className="text-center">
-                    <div className="text-4xl mb-4 animate-pulse">🌍</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Cargando MINERAL EARTH 3D</h3>
-                    <p className="text-sm text-gray-400">Inicializando motor CesiumJS...</p>
-                  </div>
-                </div>
-              }>
-                <Globe3D />
-              </Suspense>
-            )}
-          </div>
-        )}
+  // Inspector derecho (solo para Globe3D)
+  const inspector = activeTab === 'globe' ? (
+    <GlobeControlsPanel globeRef={globeRef} />
+  ) : null;
 
-        {/* Contenido documental: ancho limitado para legibilidad */}
-        {activeTab !== 'map' && activeTab !== 'globe' && (
-          <div className="max-w-7xl mx-auto px-4 py-6">
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'anomalies' && <AnomalyPanel />}
-            {activeTab === 'ai' && <AIPanel />}
-            {activeTab === 'timeline' && <TimelinePanel />}
-            {activeTab === 'measurements' && <MeasurementsPanel />}
-            {activeTab === 'layers' && <LayerCatalogPanel />}
-            {activeTab === 'joule' && <JoulePanel />}
-            {activeTab === 'matrix' && <IntegrationMatrixView />}
-            {activeTab === 'export' && <ExportPanel />}
-            {activeTab === 'docs' && <DocumentationPanel />}
+  // Contenido central
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard />;
+      case 'map':
+        return (
+          <div className="w-full h-full">
+            <MapView activeLayers={activeLayers} />
           </div>
-        )}
-      </main>
+        );
+      case 'globe':
+        return (
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-full bg-gray-900">
+              <div className="text-center">
+                <div className="text-4xl mb-4 animate-pulse">🌍</div>
+                <h3 className="text-xl font-bold text-white mb-2">Cargando MINERAL EARTH 3D</h3>
+                <p className="text-sm text-gray-400">Inicializando motor CesiumJS...</p>
+              </div>
+            </div>
+          }>
+            <Globe3D ref={globeRef} />
+          </Suspense>
+        );
+      case 'anomalies':
+        return <AnomalyPanel />;
+      case 'ai':
+        return <AIPanel />;
+      case 'timeline':
+        return <TimelinePanel />;
+      case 'measurements':
+        return <MeasurementsPanel />;
+      case 'layers':
+        return <LayerCatalogPanel />;
+      case 'joule':
+        return <JoulePanel />;
+      case 'matrix':
+        return <IntegrationMatrixView />;
+      case 'export':
+        return <ExportPanel />;
+      case 'docs':
+        return <DocumentationPanel />;
+      default:
+        return <Dashboard />;
+    }
+  };
 
-      {/* Status Bar - CORRECCIÓN FASE 6.1C: Barra de estado compacta en lugar de footer */}
-      <footer className="bg-gray-900 border-t border-gray-800 flex-shrink-0 z-40">
-        <div className="px-4 py-1.5 flex items-center justify-between text-[10px] text-gray-500">
-          <div className="flex items-center gap-4">
-            <span>MINERAL-01 Command Center</span>
-            <span className="text-gray-600">|</span>
-            <span>v7.3</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">Los límites catastrales no acreditan titularidad</span>
-          </div>
-        </div>
-      </footer>
-    </div>
+  // Visores usan todo el espacio, contenido documental tiene scroll
+  const isViewer = activeTab === 'map' || activeTab === 'globe';
+
+  return (
+    <AppShell navigation={navigation} inspector={inspector}>
+      <div className={`w-full ${isViewer ? 'h-full' : 'h-full overflow-y-auto'}`}>
+        {renderContent()}
+      </div>
+    </AppShell>
   );
 }
 

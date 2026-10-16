@@ -1,16 +1,13 @@
 /**
- * MINERAL EARTH 3D — Visor planetario con CesiumJS (FASE 5 CORREGIDO)
+ * MINERAL EARTH 3D — Visor planetario con CesiumJS
  * 
- * CORRECCIONES APLICADAS:
- * - ERROR A: Gestión de capas por referencia estable (no por posición)
- * - ERROR B: Interruptor de terreno funcional con cambio de provider
- * - ERROR C: Todas las capas implementadas o desactivadas con explicación
- * - ERROR D: Inicialización asíncrona segura con isMounted y cleanup
- * - ERROR E: Versión CesiumJS consistente
- * - ERROR F: Búsqueda mejorada con validación de coordenadas
+ * FASE 6.1D: Controles externos mediante ref forwarding
+ * - Mantiene toda la lógica interna de capas, búsqueda, cámara
+ * - Expone API mediante Globe3DHandle para controles externos
+ * - No incluye paneles flotantes sobre el visor
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { configureCesium, BASE_IMAGERY_PROVIDERS, WMS_SERVICES, PILOT_AREA } from '../lib/cesiumConfig';
 import { useMission } from '../lib/store';
 
@@ -18,11 +15,22 @@ configureCesium();
 
 let CesiumModule: any = null;
 
+// API expuesta para controles externos
+export interface Globe3DHandle {
+  flyToLocation: (lat: number, lon: number, height?: number) => void;
+  resetView: () => void;
+  toggleLayer: (layer: 'eumetsat' | 'ignPnoa' | 'igmeGeology' | 'terrain') => void;
+  setBaseImagery: (provider: keyof typeof BASE_IMAGERY_PROVIDERS) => void;
+  getCameraInfo: () => { lat: number; lon: number; height: number };
+  getActiveLayers: () => { eumetsat: boolean; ignPnoa: boolean; igmeGeology: boolean; terrain: boolean };
+  getTerrainStatus: () => 'ELLIPSOID' | 'REAL';
+}
+
 interface Globe3DProps {
   onReady?: () => void;
 }
 
-export default function Globe3D({ onReady }: Globe3DProps) {
+const Globe3D = forwardRef<Globe3DHandle, Globe3DProps>(({ onReady }, ref) => {
   const { state } = useMission();
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
@@ -52,13 +60,71 @@ export default function Globe3D({ onReady }: Globe3DProps) {
     igmeGeology: false,
     terrain: false,
   });
-  const [searchQuery, setSearchQuery] = useState('');
   const [cameraInfo, setCameraInfo] = useState({
     lat: PILOT_AREA.center.lat,
     lon: PILOT_AREA.center.lon,
     height: PILOT_AREA.center.height,
   });
   const [terrainStatus, setTerrainStatus] = useState<'ELLIPSOID' | 'REAL'>('ELLIPSOID');
+
+  // FASE 6.1D: Exponer API para controles externos
+  useImperativeHandle(ref, () => ({
+    flyToLocation: (lat: number, lon: number, height: number = 10000) => {
+      const viewer = viewerRef.current;
+      if (!viewer || !CesiumModule) return;
+      
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        console.error('Coordenadas fuera de rango');
+        return;
+      }
+      
+      viewer.camera.flyTo({
+        destination: CesiumModule.Cartesian3.fromDegrees(lon, lat, height),
+        duration: 2,
+      });
+    },
+    
+    resetView: () => {
+      const viewer = viewerRef.current;
+      if (!viewer || !CesiumModule) return;
+      
+      viewer.camera.flyTo({
+        destination: CesiumModule.Cartesian3.fromDegrees(
+          PILOT_AREA.center.lon,
+          PILOT_AREA.center.lat,
+          PILOT_AREA.center.height
+        ),
+        duration: 2,
+      });
+    },
+    
+    toggleLayer: (layer: 'eumetsat' | 'ignPnoa' | 'igmeGeology' | 'terrain') => {
+      setActiveLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
+    },
+    
+    setBaseImagery: (provider: keyof typeof BASE_IMAGERY_PROVIDERS) => {
+      const viewer = viewerRef.current;
+      if (!viewer || !CesiumModule || !layersRef.current.base) return;
+      
+      const config = BASE_IMAGERY_PROVIDERS[provider];
+      if (!config) return;
+      
+      // Remover capa base actual
+      viewer.imageryLayers.remove(layersRef.current.base);
+      
+      // Añadir nueva capa base
+      const imageryProvider = new CesiumModule.UrlTemplateImageryProvider({
+        url: config.url,
+        credit: new CesiumModule.Credit(config.credit),
+        maximumLevel: config.maxZoom,
+      });
+      layersRef.current.base = viewer.imageryLayers.addImageryProvider(imageryProvider);
+    },
+    
+    getCameraInfo: () => cameraInfo,
+    getActiveLayers: () => activeLayers,
+    getTerrainStatus: () => terrainStatus,
+  }), [cameraInfo, activeLayers, terrainStatus]);
 
   // CORRECCIÓN ERROR D: Inicialización asíncrona segura
   useEffect(() => {
@@ -211,48 +277,8 @@ export default function Globe3D({ onReady }: Globe3DProps) {
     }
   }, [activeLayers.terrain]);
 
-  // CORRECCIÓN ERROR F: Búsqueda con validación
-  const flyTo = (lat: number, lon: number, height: number = 10000) => {
-    const viewer = viewerRef.current;
-    if (!viewer || !CesiumModule) return;
-    
-    // Validar rangos
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      alert('Coordenadas fuera de rango. Lat: -90 a 90, Lon: -180 a 180');
-      return;
-    }
-    
-    viewer.camera.flyTo({
-      destination: CesiumModule.Cartesian3.fromDegrees(lon, lat, height),
-      duration: 2,
-    });
-  };
-
-  const handleSearch = () => {
-    if (!searchQuery.trim()) return;
-    
-    // Intentar parsear coordenadas
-    const coordMatch = searchQuery.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1]);
-      const lon = parseFloat(coordMatch[2]);
-      flyTo(lat, lon, 5000);
-    } else {
-      // Usar geocoder de Cesium para búsqueda por nombre
-      const viewer = viewerRef.current;
-      if (viewer && viewer.geocoder) {
-        viewer.geocoder.viewModel.search(searchQuery);
-      }
-    }
-  };
-
-  const resetView = () => {
-    flyTo(PILOT_AREA.center.lat, PILOT_AREA.center.lon, PILOT_AREA.center.height);
-  };
-
-  const toggleLayer = (layer: keyof typeof activeLayers) => {
-    setActiveLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
-  };
+  // FASE 6.1D: Funciones internas eliminadas - ahora se acceden mediante ref
+  // flyTo, resetView, toggleLayer están expuestas en useImperativeHandle
 
   if (error) {
     return (
@@ -312,4 +338,8 @@ export default function Globe3D({ onReady }: Globe3DProps) {
       )}
     </div>
   );
-}
+});
+
+Globe3D.displayName = 'Globe3D';
+
+export default Globe3D;
